@@ -2,8 +2,8 @@
 
 A modern process management and scheduling platform built with Go and Vue 3.
 
-[![CI](https://github.com/snail-sky/starfleet/actions/workflows/ci.yml/badge.svg)](https://github.com/snail-sky/starfleet/actions/workflows/ci.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/snail-sky/starfleet)](https://goreportcard.com/report/github.com/snail-sky/starfleet)
+[![CI](https://github.com/snail2sky/starfleet/actions/workflows/ci.yml/badge.svg)](https://github.com/snail2sky/starfleet/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/snail2sky/starfleet)](https://goreportcard.com/report/github.com/snail2sky/starfleet)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Starfleet is a modern alternative to supervisord, designed for managing long-running processes and scheduled tasks with a beautiful web dashboard, real-time log streaming, health checks, and hot-reload capabilities.
@@ -26,11 +26,11 @@ Starfleet is a modern alternative to supervisord, designed for managing long-run
 
 ```bash
 # Download latest release
-curl -sL https://github.com/snail-sky/starfleet/releases/latest/download/starfleet-linux-amd64 -o starfleet
+curl -sL https://github.com/snail2sky/starfleet/releases/latest/download/starfleet-linux-amd64 -o starfleet
 chmod +x starfleet
 
 # Or build from source
-git clone https://github.com/snail-sky/starfleet.git
+git clone https://github.com/snail2sky/starfleet.git
 cd starfleet
 make
 ```

@@ -19,6 +19,35 @@ export interface ProcessInfo {
   labels: Record<string, string>
 }
 
+/** Full process configuration (snake_case json tags from Go). */
+export interface ProcessConfig {
+  command: string
+  directory?: string
+  user?: string
+  autostart?: boolean
+  autorestart?: string
+  startsecs?: number
+  startretries?: number
+  stopsignal?: string
+  stopwaitsecs?: number
+  environment?: Record<string, string>
+  envfile?: string
+  stdout?: { path: string; maxbytes: string; backups: number }
+  stderr?: { path: string; maxbytes: string; backups: number }
+  healthcheck?: {
+    type: string
+    url?: string
+    address?: string
+    interval: number // nanoseconds
+    timeout: number
+    retries: number
+  }
+  labels?: Record<string, string>
+  depends_on?: string[]
+  restart_delay?: number // nanoseconds
+  backoff_limit?: number // nanoseconds
+}
+
 export interface SystemOverview {
   host: { hostname: string; os: string; platform: string; kernel: string; uptime: number; go_version: string }
   cpu: { cores: number; percent: number[] }
@@ -47,12 +76,28 @@ export interface HistoryEntry {
   error: string
 }
 
+export interface LogEntry {
+  process: string
+  stream: string // "stdout" | "stderr"
+  line: string
+  timestamp: number // unix ms
+}
+
 // Process API
 export const getProcesses = () => api.get<{ data: ProcessInfo[] }>('/processes')
-export const getProcess = (name: string) => api.get<{ data: ProcessInfo }>(`/processes/${name}`)
+export const getProcess = (name: string) =>
+  api.get<{ data: ProcessInfo; config?: ProcessConfig }>(`/processes/${name}`)
 export const startProcess = (name: string) => api.post(`/processes/${name}/start`)
 export const stopProcess = (name: string) => api.post(`/processes/${name}/stop`)
 export const restartProcess = (name: string) => api.post(`/processes/${name}/restart`)
+
+// Log API
+export const getProcessLogs = (name: string, lines = 200, stream?: string) =>
+  api.get<{ data: LogEntry[] }>(
+    `/processes/${name}/logs?lines=${lines}` + (stream ? `&stream=${stream}` : ''),
+  )
+export const getAllLogs = (lines = 200) =>
+  api.get<{ data: LogEntry[] }>(`/logs?lines=${lines}`)
 
 // System API
 export const getSystemOverview = () => api.get<{ data: SystemOverview }>('/system/overview')

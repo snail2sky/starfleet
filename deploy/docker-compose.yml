@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   starfleet:
-    image: ghcr.io/snail-sky/starfleet:latest
+    image: ghcr.io/snail2sky/starfleet:latest
     container_name: starfleet
     restart: unless-stopped
     ports:

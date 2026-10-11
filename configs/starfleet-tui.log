@@ -1,0 +1,2 @@
+{"time":"2026-10-11T23:54:16.3500533+08:00","level":"INFO","msg":"starfleet starting","version":"dev","config":"configs/starfleet.yml","mode":"tui"}
+{"time":"2026-10-11T23:54:16.3685824+08:00","level":"INFO","msg":"tui: connecting to running starfleet server","api":"http://localhost:8080"}

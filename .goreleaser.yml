@@ -38,8 +38,8 @@ archives:
 
 dockers:
   - image_templates:
-      - "ghcr.io/snail-sky/starfleet:{{ .Version }}"
-      - "ghcr.io/snail-sky/starfleet:latest"
+      - "ghcr.io/snail2sky/starfleet:{{ .Version }}"
+      - "ghcr.io/snail2sky/starfleet:latest"
     dockerfile: deploy/Dockerfile
     build_flag_templates:
       - "--pull"

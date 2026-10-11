@@ -6,10 +6,12 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/snail-sky/starfleet/internal/config"
+	"github.com/google/shlex"
+	"github.com/snail2sky/starfleet/internal/config"
 )
 
 // Process represents a single managed process with its state machine.
@@ -27,6 +29,7 @@ type Process struct {
 	lastError  error
 	stopCh     chan struct{}
 	doneCh     chan struct{}
+	waitDone   chan struct{} // closed when cmd.Wait() returns in runOnce
 	cancel     context.CancelFunc
 	logger     *slog.Logger
 }
@@ -114,6 +117,7 @@ func (p *Process) Stop() error {
 	}
 	p.state = StateStopping
 	cmd := p.cmd
+	waitDone := p.waitDone
 	p.mu.Unlock()
 
 	select {
@@ -128,18 +132,15 @@ func (p *Process) Stop() error {
 			p.logger.Warn("failed to send signal", "error", err)
 		}
 
-		done := make(chan struct{})
-		go func() {
-			_ = cmd.Wait()
-			close(done)
-		}()
-
-		select {
-		case <-done:
-		case <-time.After(time.Duration(p.Config.StopWaitSecs) * time.Second):
-			p.logger.Warn("process did not stop in time, sending SIGKILL")
-			_ = cmd.Process.Kill()
-			<-done
+		// Wait for runOnce's cmd.Wait() to complete (not our own).
+		if waitDone != nil {
+			select {
+			case <-waitDone:
+			case <-time.After(time.Duration(p.Config.StopWaitSecs) * time.Second):
+				p.logger.Warn("process did not stop in time, sending SIGKILL")
+				_ = cmd.Process.Kill()
+				<-waitDone
+			}
 		}
 	}
 
@@ -326,12 +327,19 @@ func (p *Process) runOnce() {
 
 	p.logger.Info("process started", "pid", cmd.Process.Pid)
 
+	// Set up waitDone so Stop() can wait for cmd.Wait() without calling it twice.
+	waitDone := make(chan struct{})
+	p.mu.Lock()
+	p.waitDone = waitDone
+	p.mu.Unlock()
+
 	// Start log collection.
 	go collectLogs(stdoutPipe, p.Name, "stdout")
 	go collectLogs(stderrPipe, p.Name, "stderr")
 
 	// Wait for process to exit.
 	err = cmd.Wait()
+	close(waitDone) // signal Stop() that we're done
 	exitCode := 0
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -346,44 +354,21 @@ func (p *Process) runOnce() {
 	p.lastError = err
 	p.cmd = nil
 	p.pid = 0
+	p.waitDone = nil
 	p.mu.Unlock()
 
 	p.logger.Info("process exited", "exit_code", exitCode)
 }
 
-// splitCommand splits a command string into program and arguments.
-// This is a simple split by spaces, respecting quoted strings.
+// splitCommand splits a command string into program and arguments using
+// POSIX-style shell lexing (quotes, backslash escapes, nested quoting).
+// Replaces the previous hand-rolled parser which mishandled escapes.
 func splitCommand(cmd string) []string {
-	var args []string
-	var current string
-	inQuote := false
-	quoteChar := byte(0)
-
-	for i := 0; i < len(cmd); i++ {
-		c := cmd[i]
-		if inQuote {
-			if c == quoteChar {
-				inQuote = false
-			} else {
-				current += string(c)
-			}
-		} else {
-			switch c {
-			case '"', '\'':
-				inQuote = true
-				quoteChar = c
-			case ' ', '\t':
-				if current != "" {
-					args = append(args, current)
-					current = ""
-				}
-			default:
-				current += string(c)
-			}
-		}
-	}
-	if current != "" {
-		args = append(args, current)
+	args, err := shlex.Split(cmd)
+	if err != nil {
+		// Fall back to whitespace splitting on malformed input so the
+		// process can still attempt to start (and surface the real error).
+		return strings.Fields(cmd)
 	}
 	return args
 }

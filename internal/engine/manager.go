@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/snail-sky/starfleet/internal/config"
+	"github.com/snail2sky/starfleet/internal/config"
 )
 
 // Manager manages all configured processes.
@@ -131,6 +131,17 @@ type ProcessInfo struct {
 	Autostart  bool              `json:"autostart"`
 	Autorestart string           `json:"autorestart"`
 	Labels     map[string]string `json:"labels"`
+}
+
+// GetConfig returns the full configuration of a process.
+func (m *Manager) GetConfig(name string) (config.ProcessConfig, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	cfg, ok := m.configs[name]
+	if !ok {
+		return config.ProcessConfig{}, fmt.Errorf("process %q not found", name)
+	}
+	return cfg, nil
 }
 
 // List returns info about all configured processes.

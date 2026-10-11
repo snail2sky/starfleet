@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/snail-sky/starfleet/internal/config"
-	"github.com/snail-sky/starfleet/internal/engine"
+	"github.com/snail2sky/starfleet/internal/config"
+	"github.com/snail2sky/starfleet/internal/engine"
 )
 
 func setupTestRouter(mgr *engine.Manager) *gin.Engine {

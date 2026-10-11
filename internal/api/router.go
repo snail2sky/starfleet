@@ -2,12 +2,12 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/snail-sky/starfleet/internal/api/handler"
-	"github.com/snail-sky/starfleet/internal/api/middleware"
-	"github.com/snail-sky/starfleet/internal/api/ws"
-	"github.com/snail-sky/starfleet/internal/config"
-	"github.com/snail-sky/starfleet/internal/engine"
-	"github.com/snail-sky/starfleet/internal/scheduler"
+	"github.com/snail2sky/starfleet/internal/api/handler"
+	"github.com/snail2sky/starfleet/internal/api/middleware"
+	"github.com/snail2sky/starfleet/internal/api/ws"
+	"github.com/snail2sky/starfleet/internal/config"
+	"github.com/snail2sky/starfleet/internal/engine"
+	"github.com/snail2sky/starfleet/internal/scheduler"
 )
 
 // Router sets up all API routes.
@@ -52,7 +52,11 @@ func NewRouter(mgr *engine.Manager, sched *scheduler.Scheduler, hub *ws.Hub, cfg
 			procs.POST("/:name/start", processH.Start)
 			procs.POST("/:name/stop", processH.Stop)
 			procs.POST("/:name/restart", processH.Restart)
+			procs.GET("/:name/logs", processH.Logs)
 		}
+
+		// Aggregated logs across all processes.
+		v1.GET("/logs", handler.AllLogs)
 
 		// Schedules.
 		schedules := v1.Group("/schedules")
@@ -82,15 +86,13 @@ func NewRouter(mgr *engine.Manager, sched *scheduler.Scheduler, hub *ws.Hub, cfg
 		}
 	}
 
+	// Serve embedded Vue frontend (SPA with history-mode fallback).
+	ServeStatic(r)
+
 	return &Router{engine: r}
 }
 
 // Run starts the HTTP server.
 func (r *Router) Run(addr string) error {
 	return r.engine.Run(addr)
-}
-
-// ServeHTTP implements http.Handler for embedding.
-func (r *Router) ServeHTTP(w interface{}, req interface{}) {
-	// Delegate to gin engine.
 }

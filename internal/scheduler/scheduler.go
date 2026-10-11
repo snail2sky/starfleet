@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/robfig/cron/v3"
-	"github.com/snail-sky/starfleet/internal/config"
-	"github.com/snail-sky/starfleet/internal/event"
+	"github.com/snail2sky/starfleet/internal/config"
+	"github.com/snail2sky/starfleet/internal/event"
 )
 
 // Scheduler manages scheduled tasks.

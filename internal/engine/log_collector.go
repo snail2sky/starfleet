@@ -5,14 +5,15 @@ import (
 	"io"
 	"log/slog"
 	"sync"
+	"time"
 )
 
 // LogEntry represents a single log line.
 type LogEntry struct {
-	Process   string
-	Stream    string // "stdout" or "stderr"
-	Line      string
-	Timestamp int64
+	Process   string `json:"process"`
+	Stream    string `json:"stream"` // "stdout" or "stderr"
+	Line      string `json:"line"`
+	Timestamp int64  `json:"timestamp"` // unix milliseconds
 }
 
 // LogRing is a thread-safe ring buffer for log entries.
@@ -133,6 +134,15 @@ type LogCallback func(entry LogEntry)
 var logCallbacks []LogCallback
 var logCallbacksMu sync.Mutex
 
+// defaultCollector stores the most recent log lines for the API.
+// Keyed by process name, ring-buffered.
+var defaultCollector = NewLogCollector(2000)
+
+// DefaultCollector returns the process-wide log collector.
+func DefaultCollector() *LogCollector {
+	return defaultCollector
+}
+
 // RegisterLogCallback registers a callback for new log entries.
 func RegisterLogCallback(cb LogCallback) {
 	logCallbacksMu.Lock()
@@ -140,23 +150,26 @@ func RegisterLogCallback(cb LogCallback) {
 	logCallbacks = append(logCallbacks, cb)
 }
 
-// collectLogs reads from an io.Reader and distributes log lines.
+// collectLogs reads from an io.Reader, stores lines in the default
+// collector, and notifies callbacks (WebSocket, etc.).
 func collectLogs(reader io.Reader, process, stream string) {
 	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024) // allow long lines
 	for scanner.Scan() {
-		line := scanner.Text()
 		entry := LogEntry{
-			Process: process,
-			Stream:  stream,
-			Line:    line,
+			Process:   process,
+			Stream:    stream,
+			Line:      scanner.Text(),
+			Timestamp: time.Now().UnixMilli(),
 		}
-		// Notify callbacks (WebSocket, etc.)
+		// Store in ring buffer for REST API queries.
+		defaultCollector.GetRing(process).Append(entry)
+		// Notify callbacks (WebSocket, etc.).
 		logCallbacksMu.Lock()
 		for _, cb := range logCallbacks {
 			cb(entry)
 		}
 		logCallbacksMu.Unlock()
-		_ = line // avoid unused if callbacks are empty
 	}
 	if err := scanner.Err(); err != nil {
 		slog.Debug("log scanner error", "process", process, "stream", stream, "error", err)

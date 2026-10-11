@@ -1,0 +1,311 @@
+/* ============================================================
+   Starfleet design tokens — dark theme
+   Palette: validated reference palette (dark mode values).
+   Surfaces #1a1a19 / #0d0d0d, ink #fff/#c3c2b7/#898781,
+   accent blue #3987e5, status: good #0ca30c · warn #fab219 ·
+   critical #d03b3b. Status colors always ship with a text label.
+   ============================================================ */
+:root {
+  color-scheme: dark;
+
+  /* surfaces */
+  --plane: #0d0d0d;          /* page plane */
+  --surface: #1a1a19;        /* card surface */
+  --surface-2: #222221;      /* raised / hover */
+  --surface-3: #2c2c2a;      /* inputs */
+
+  /* ink */
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --ink-3: #898781;
+
+  /* lines */
+  --line: #2c2c2a;           /* hairline */
+  --line-2: #383835;         /* baseline */
+  --ring: rgba(255, 255, 255, 0.10);
+
+  /* accent (blue slot, dark step) */
+  --accent: #3987e5;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(57, 135, 229, 0.16);
+  --track: rgba(57, 135, 229, 0.16); /* meter track: same-hue tint */
+
+  /* status (reserved — never used as series colors) */
+  --good: #0ca30c;
+  --warn: #fab219;
+  --serious: #ec835a;
+  --crit: #d03b3b;
+  --good-soft: rgba(12, 163, 12, 0.14);
+  --warn-soft: rgba(250, 178, 25, 0.14);
+  --crit-soft: rgba(208, 59, 59, 0.14);
+
+  /* geometry */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+
+  /* element-plus overrides */
+  --el-color-primary: #3987e5;
+  --el-color-success: #0ca30c;
+  --el-color-warning: #fab219;
+  --el-color-danger: #d03b3b;
+  --el-color-error: #d03b3b;
+  --el-bg-color: #1a1a19;
+  --el-bg-color-page: #0d0d0d;
+  --el-bg-color-overlay: #222221;
+  --el-fill-color-blank: #1a1a19;
+  --el-fill-color: #222221;
+  --el-fill-color-light: #222221;
+  --el-fill-color-lighter: #2c2c2a;
+  --el-border-color: #2c2c2a;
+  --el-border-color-light: #2c2c2a;
+  --el-border-color-lighter: #262625;
+  --el-border-color-extra-light: #222221;
+  --el-text-color-primary: #ffffff;
+  --el-text-color-regular: #c3c2b7;
+  --el-text-color-secondary: #898781;
+  --el-text-color-placeholder: #898781;
+  --el-text-color-disabled: #5c5b57;
+  --el-mask-color: rgba(0, 0, 0, 0.6);
+  --el-box-shadow-light: 0 6px 24px rgba(0, 0, 0, 0.5);
+  --el-box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+  --el-border-radius-base: 8px;
+  --el-font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* ---------- base ---------- */
+* { box-sizing: border-box; }
+
+html, body, #app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--plane);
+  color: var(--ink-2);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection { background: rgba(57, 135, 229, 0.35); }
+
+/* ---------- shared components ---------- */
+
+/* stat tile — label (sentence case) + value (semibold, proportional) */
+.tile {
+  background: var(--surface);
+  border: 1px solid var(--ring);
+  border-radius: var(--r-md);
+  padding: 16px 18px;
+  min-width: 0;
+  overflow: hidden;
+}
+.tile__label {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+  margin-bottom: 6px;
+}
+.tile__value {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.15;
+  /* proportional figures for big standalone numbers */
+}
+.tile__sub {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* meter — fill carries severity, track is same-hue tint */
+.meter {
+  height: 6px;
+  border-radius: 4px;
+  background: var(--track);
+  overflow: hidden;
+  margin-top: 12px;
+}
+.meter__fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+.meter--ok .meter__fill { background: var(--accent); }
+.meter--warn .meter__fill { background: var(--warn); }
+.meter--crit .meter__fill { background: var(--crit); }
+
+/* state badge — color + text label, never color alone */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.badge--running { color: var(--good); background: var(--good-soft); border-color: rgba(12, 163, 12, 0.35); }
+.badge--warn { color: var(--warn); background: var(--warn-soft); border-color: rgba(250, 178, 25, 0.35); }
+.badge--crit { color: var(--crit); background: var(--crit-soft); border-color: rgba(208, 59, 59, 0.4); }
+.badge--idle { color: var(--ink-3); background: rgba(137, 135, 129, 0.12); border-color: rgba(137, 135, 129, 0.3); }
+
+/* section heading */
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-3);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 26px 0 12px;
+}
+
+/* card panel */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--ring);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+/* buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 13px;
+  font-size: 12.5px;
+  font-weight: 500;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.btn:hover { background: var(--surface-3); color: var(--ink); border-color: var(--line-2); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.btn--primary:hover { background: #2a78d6; border-color: #2a78d6; color: #fff; }
+.btn--danger:hover { border-color: var(--crit); color: var(--crit); }
+
+/* empty state */
+.empty {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--ink-3);
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+.empty strong { color: var(--ink-2); font-weight: 600; }
+
+/* monospace log lines */
+.log-lines {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+/* ---------- element-plus overrides ---------- */
+.el-table {
+  --el-table-bg-color: var(--surface);
+  --el-table-tr-bg-color: var(--surface);
+  --el-table-header-bg-color: var(--surface);
+  --el-table-row-hover-bg-color: var(--surface-2);
+  --el-table-border-color: var(--line);
+  --el-table-header-text-color: var(--ink-3);
+  --el-table-text-color: var(--ink-2);
+  font-size: 13px;
+}
+.el-table th.el-table__cell {
+  font-weight: 600;
+  font-size: 11.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: var(--surface) !important;
+}
+.el-table .el-table__cell { padding: 10px 0; }
+.el-table--enable-row-hover .el-table__body tr:hover > td.el-table__cell {
+  background: var(--surface-2);
+}
+/* rows must not blow out the grid when a dialog opens under them */
+.el-table__inner-wrapper::before { display: none; }
+
+.el-dialog {
+  --el-dialog-bg-color: var(--surface);
+  border: 1px solid var(--ring);
+  border-radius: var(--r-lg);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6);
+}
+.el-dialog__title {
+  color: var(--ink);
+  font-weight: 650;
+  font-size: 15.5px;
+  word-break: break-all;
+  line-height: 1.4;
+}
+.el-dialog__header {
+  border-bottom: 1px solid var(--line);
+  margin-right: 0;
+  padding-bottom: 13px;
+  padding-right: 56px;
+}
+.el-dialog__body {
+  padding-top: 16px;
+  /* keep long detail views scrollable inside the viewport */
+  max-height: calc(100vh - 190px);
+  overflow-y: auto;
+}
+.el-dialog__headerbtn { top: 14px; }
+.el-dialog__headerbtn .el-dialog__close { color: var(--ink-3); }
+.el-dialog__headerbtn:hover .el-dialog__close { color: var(--ink); }
+
+.el-tag { border-radius: 999px; font-weight: 600; }
+
+.el-select__wrapper {
+  background: var(--surface-2);
+  border-color: var(--line);
+  border-radius: var(--r-sm);
+  min-height: 32px;
+}
+.el-select__selected-item { color: var(--ink-2); }
+
+.el-input__wrapper {
+  background: var(--surface-2);
+  border-color: var(--line);
+  border-radius: var(--r-sm);
+}
+
+.el-message-box {
+  --el-messagebox-bg-color: var(--surface);
+  border: 1px solid var(--ring);
+}
+
+/* thin scrollbars */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--line-2);
+  border-radius: 5px;
+  border: 2px solid var(--plane);
+}
+::-webkit-scrollbar-thumb:hover { background: #4a4a47; }

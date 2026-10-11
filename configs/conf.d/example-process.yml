@@ -1,0 +1,20 @@
+# Example: put each process in a separate file under conf.d/
+# Starfleet auto-includes all .yml files from conf.d/ directory.
+
+processes:
+  # my-app:
+  #   command: "/usr/bin/my-app --port 8080"
+  #   directory: /opt/my-app
+  #   autostart: true
+  #   autorestart: "true"
+  #   startsecs: 3
+  #   stdout:
+  #     path: /var/log/my-app/stdout.log
+  #     maxbytes: "100M"
+  #     backups: 5
+  #   stderr:
+  #     path: /var/log/my-app/stderr.log
+  #     maxbytes: "50M"
+  #     backups: 3
+  #   labels:
+  #     group: backend

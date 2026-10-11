@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/snail-sky/starfleet/internal/config"
-	"github.com/snail-sky/starfleet/internal/event"
+	"github.com/snail2sky/starfleet/internal/config"
+	"github.com/snail2sky/starfleet/internal/event"
 )
 
 // Notifier sends notifications for events.

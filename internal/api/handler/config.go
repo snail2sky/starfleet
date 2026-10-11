@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/snail-sky/starfleet/internal/config"
+	"github.com/snail2sky/starfleet/internal/config"
 )
 
 // ConfigHandler handles configuration API requests.

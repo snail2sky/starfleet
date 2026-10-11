@@ -1,5 +1,12 @@
 # Starfleet Process Manager Configuration
-# https://github.com/snail-sky/starfleet
+# https://github.com/snail2sky/starfleet
+
+# Include additional config files or directories.
+# Processes and schedules from included files are merged into the main config.
+# The conf.d/ directory is auto-included if it exists next to this file.
+# includes:
+#   - "extra-processes.yml"
+#   - "/etc/starfleet/conf.d/"
 
 server:
   host: "0.0.0.0"

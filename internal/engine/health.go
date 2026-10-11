@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/snail-sky/starfleet/internal/config"
-	"github.com/snail-sky/starfleet/internal/event"
+	"github.com/snail2sky/starfleet/internal/config"
+	"github.com/snail2sky/starfleet/internal/event"
 )
 
 // HealthChecker monitors process health and triggers restarts.

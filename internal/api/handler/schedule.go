@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/snail-sky/starfleet/internal/scheduler"
+	"github.com/snail2sky/starfleet/internal/scheduler"
 )
 
 // ScheduleHandler handles schedule-related API requests.
