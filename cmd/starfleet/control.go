@@ -182,13 +182,17 @@ var schedulesCmd = &cobra.Command{
 			fmt.Println("no scheduled jobs")
 			return nil
 		}
-		fmt.Printf("%-24s %-14s %-7s %-9s %s\n", "NAME", "CRON", "TYPE", "ENABLED", "COMMAND/URL")
+		fmt.Printf("%-24s %-14s %-7s %-9s %-20s %s\n", "NAME", "CRON", "TYPE", "ENABLED", "NEXT RUN", "COMMAND/URL")
 		for _, j := range jobs {
 			cmdOrURL := j.Command
 			if cmdOrURL == "" {
 				cmdOrURL = j.URL
 			}
-			fmt.Printf("%-24s %-14s %-7s %-9t %s\n", j.Name, j.Cron, j.Type, j.Enabled, cmdOrURL)
+			next := j.NextRun
+			if next == "" {
+				next = "—"
+			}
+			fmt.Printf("%-24s %-14s %-7s %-9t %-20s %s\n", j.Name, j.Cron, j.Type, j.Enabled, next, cmdOrURL)
 		}
 		return nil
 	},

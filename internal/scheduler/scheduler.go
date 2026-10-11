@@ -71,13 +71,15 @@ func (s *Scheduler) Stop() {
 	s.logger.Info("scheduler stopped")
 }
 
-// List returns all scheduled jobs.
+// List returns all scheduled jobs (with NextRun filled in when scheduled).
 func (s *Scheduler) List() []JobInfo {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var list []JobInfo
 	for _, job := range s.jobs {
-		list = append(list, job.Info())
+		info := job.Info()
+		s.fillNextRun(&info, job)
+		list = append(list, info)
 	}
 	return list
 }
@@ -91,7 +93,17 @@ func (s *Scheduler) Get(name string) (*JobInfo, error) {
 		return nil, fmt.Errorf("schedule %q not found", name)
 	}
 	info := job.Info()
+	s.fillNextRun(&info, job)
 	return &info, nil
+}
+
+// fillNextRun sets NextRun from the cron entry's next fire time.
+// Callers must hold at least a read lock.
+func (s *Scheduler) fillNextRun(info *JobInfo, job *Job) {
+	entry := s.cron.Entry(job.entryID)
+	if entry.ID > 0 && !entry.Next.IsZero() {
+		info.NextRun = entry.Next.Format("2006-01-02 15:04:05")
+	}
 }
 
 // Run triggers a job immediately.
@@ -239,5 +251,6 @@ type JobInfo struct {
 	URL     string            `json:"url,omitempty"`
 	Enabled bool              `json:"enabled"`
 	Timeout string            `json:"timeout"`
+	NextRun string            `json:"next_run,omitempty"` // next fire time, local tz
 	Labels  map[string]string `json:"labels"`
 }
