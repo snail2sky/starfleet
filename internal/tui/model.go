@@ -279,12 +279,6 @@ func (m Model) handleDetailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, key.NewBinding(key.WithKeys("esc", "backspace", "q"))):
 		m.viewMode = ViewList
-	case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k"))):
-		if len(m.detailLines) > 0 {
-			// Scroll up (rotate last line to front)
-		}
-	case key.Matches(msg, key.NewBinding(key.WithKeys("down", "j"))):
-		// Scroll down
 	case key.Matches(msg, key.NewBinding(key.WithKeys("l"))):
 		// Switch from detail view to the log view of the same process.
 		if m.detailName != "" {

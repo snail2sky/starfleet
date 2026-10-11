@@ -20,7 +20,6 @@ type LogEntry struct {
 type LogRing struct {
 	mu      sync.RWMutex
 	buf     []LogEntry
-	size    int
 	head    int
 	count   int
 	maxSize int
