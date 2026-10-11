@@ -9,12 +9,25 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: linux
+            goarch: arm
+            goarm: "7"
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version: '1.23'
@@ -23,18 +36,58 @@ jobs:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: web/package-lock.json
-      - name: Build Frontend
+      - name: Build frontend (embedded via go:embed)
         working-directory: web
         run: |
           npm ci
           npx vite build
-          # replace the embed dir wholesale so files land at dist/*.js
-          # (cp -r dist <existing dir> would nest as dist/dist/)
           rm -rf ../internal/api/dist
           cp -r dist ../internal/api/dist
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          version: latest
-          args: release --clean
+      - name: Build binary
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+          CGO_ENABLED: "0"
+        run: |
+          ARCH="${GOARCH}"
+          if [ -n "$GOARM" ]; then ARCH="${GOARCH}v${GOARM}"; fi
+          go build -trimpath \
+            -ldflags "-s -w -X main.version=${GITHUB_REF_NAME} -X main.commit=${GITHUB_SHA::8} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -o "starfleet_${GITHUB_REF_NAME}_${GOOS}_${ARCH}/starfleet" \
+            ./cmd/starfleet/
+          cp README.md LICENSE "starfleet_${GITHUB_REF_NAME}_${GOOS}_${ARCH}/"
+          tar -czf "starfleet_${GITHUB_REF_NAME}_${GOOS}_${ARCH}.tar.gz" "starfleet_${GITHUB_REF_NAME}_${GOOS}_${ARCH}"
+      - name: Smoke test (native target)
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        run: |
+          mv starfleet_*_linux_amd64/starfleet ./sf
+          ./sf version
+          ./sf --help | head -5
+          ./sf validate -c configs/starfleet.yml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: starfleet-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm && format('-v{0}', matrix.goarm) || '' }}
+          path: starfleet_*.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: dist
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum *.tar.gz > checksums.txt
+          cat checksums.txt
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Starfleet $GITHUB_REF_NAME" \
+            --generate-notes
