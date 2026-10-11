@@ -150,17 +150,22 @@ func RegisterLogCallback(cb LogCallback) {
 }
 
 // collectLogs reads from an io.Reader, stores lines in the default
-// collector, and notifies callbacks (WebSocket, etc.).
-func collectLogs(reader io.Reader, process, stream string) {
+// collector, mirrors them to the process's log file (when configured),
+// and notifies callbacks (WebSocket, etc.).
+func collectLogs(reader io.Reader, process, stream string, file *fileLog) {
+	defer file.close()
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024) // allow long lines
 	for scanner.Scan() {
+		line := scanner.Text()
 		entry := LogEntry{
 			Process:   process,
 			Stream:    stream,
-			Line:      scanner.Text(),
+			Line:      line,
 			Timestamp: time.Now().UnixMilli(),
 		}
+		// Persist to the configured logfile (supervisord parity).
+		file.writeLine(line)
 		// Store in ring buffer for REST API queries.
 		defaultCollector.GetRing(process).Append(entry)
 		// Notify callbacks (WebSocket, etc.).

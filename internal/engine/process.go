@@ -19,19 +19,21 @@ type Process struct {
 	Name   string
 	Config config.ProcessConfig
 
-	mu         sync.RWMutex
-	state      State
-	cmd        *exec.Cmd
-	pid        int
-	startTime  time.Time
-	exitCode   int
-	retryCount int
-	lastError  error
-	stopCh     chan struct{}
-	doneCh     chan struct{}
-	waitDone   chan struct{} // closed when cmd.Wait() returns in runOnce
-	cancel     context.CancelFunc
-	logger     *slog.Logger
+	mu            sync.RWMutex
+	state         State
+	cmd           *exec.Cmd
+	pid           int
+	startTime     time.Time
+	exitCode      int
+	retryCount    int
+	startFailures int // consecutive runs that died before startsecs
+	lastRunDur    time.Duration
+	lastError     error
+	stopCh        chan struct{}
+	doneCh        chan struct{}
+	waitDone      chan struct{} // closed when cmd.Wait() returns in runOnce
+	cancel        context.CancelFunc
+	logger        *slog.Logger
 }
 
 // NewProcess creates a new Process from configuration.
@@ -104,6 +106,7 @@ func (p *Process) Start() error {
 	}
 	p.state = StateStarting
 	p.retryCount = 0
+	p.startFailures = 0
 	prevDone := p.doneCh
 	p.stopCh = make(chan struct{}, 1)
 	p.doneCh = make(chan struct{})
@@ -177,6 +180,19 @@ func (p *Process) Stop() error {
 	return nil
 }
 
+// shouldFatal decides whether start retries are exhausted (supervisord
+// semantics): only consecutive failures to get past startsecs lead to
+// FATAL. A process that started OK and later exited is retried forever.
+func shouldFatal(startFailures, maxRetries int, startedOK bool) bool {
+	if startedOK {
+		return false
+	}
+	if maxRetries <= 0 {
+		maxRetries = 1
+	}
+	return startFailures >= maxRetries
+}
+
 // Restart stops and then starts the process.
 func (p *Process) Restart() error {
 	if err := p.Stop(); err != nil {
@@ -214,7 +230,26 @@ func (p *Process) runLoop() {
 		retries := p.retryCount
 		maxRetries := p.Config.StartRetries
 		exitCode := p.exitCode
+		lastRun := p.lastRunDur
 		p.mu.RUnlock()
+
+		// supervisord semantics: a run that lasted >= startsecs counts as a
+		// successful start (retries reset); only dying *during* startup
+		// accumulates toward FATAL. Flapping daemons (network timeouts etc)
+		// restart forever with growing backoff instead of giving up.
+		startSecs := time.Duration(p.Config.StartSecs) * time.Second
+		if startSecs <= 0 {
+			startSecs = time.Second // documented default
+		}
+		startedOK := lastRun >= startSecs
+		p.mu.Lock()
+		if startedOK {
+			p.startFailures = 0
+		} else {
+			p.startFailures++
+		}
+		startFails := p.startFailures
+		p.mu.Unlock()
 
 		if state == StateStopped || state == StateStopping {
 			return
@@ -247,9 +282,10 @@ func (p *Process) runLoop() {
 			return
 		}
 
-		if retries >= maxRetries {
+		if shouldFatal(startFails, maxRetries, startedOK) {
 			p.logger.Error("exceeded start retries, entering FATAL state",
-				"retries", retries, "max", maxRetries)
+				"start_failures", startFails, "max", maxRetries,
+				"last_run", lastRun)
 			p.mu.Lock()
 			p.state = StateFatal
 			p.mu.Unlock()
@@ -316,6 +352,16 @@ func (p *Process) runOnce() {
 	// Create process group for clean signal forwarding.
 	setProcessGroup(cmd)
 
+	// Run as the configured user (supervisord's user= equivalent).
+	if err := configureUser(cmd, p.Config.User); err != nil {
+		p.logger.Error("cannot run as configured user", "user", p.Config.User, "error", err)
+		p.mu.Lock()
+		p.state = StateFatal
+		p.lastError = err
+		p.mu.Unlock()
+		return
+	}
+
 	// Set up log pipes.
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
@@ -371,8 +417,11 @@ func (p *Process) runOnce() {
 	p.mu.Unlock()
 
 	// Start log collection.
-	go collectLogs(stdoutPipe, p.Name, "stdout")
-	go collectLogs(stderrPipe, p.Name, "stderr")
+	// Persist output to the configured log files (supervisord parity).
+	stdoutFile := newFileLog(p.Config.StdoutLog.Path, p.Config.StdoutLog.MaxBytes, p.Config.StdoutLog.Backups)
+	stderrFile := newFileLog(p.Config.StderrLog.Path, p.Config.StderrLog.MaxBytes, p.Config.StderrLog.Backups)
+	go collectLogs(stdoutPipe, p.Name, "stdout", stdoutFile)
+	go collectLogs(stderrPipe, p.Name, "stderr", stderrFile)
 
 	// Wait for process to exit.
 	err = cmd.Wait()
@@ -387,14 +436,16 @@ func (p *Process) runOnce() {
 	}
 
 	p.mu.Lock()
+	ranFor := time.Since(p.startTime)
 	p.exitCode = exitCode
 	p.lastError = err
+	p.lastRunDur = ranFor
 	p.cmd = nil
 	p.pid = 0
 	p.waitDone = nil
 	p.mu.Unlock()
 
-	p.logger.Info("process exited", "exit_code", exitCode)
+	p.logger.Info("process exited", "exit_code", exitCode, "ran_for", ranFor)
 }
 
 // splitCommand splits a command string into program and arguments using

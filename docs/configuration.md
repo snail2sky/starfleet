@@ -109,11 +109,11 @@ server:
 |------|------|--------|------|
 | `command` | string | **必填** | 启动命令，POSIX shell 词法解析（支持单/双引号、反斜杠转义、空参数） |
 | `directory` | string | — | 工作目录（chdir 后执行） |
-| `user` | string | 当前用户 | 以哪个用户运行 |
+| `user` | string | 当前用户 | 以哪个用户运行（等价 supervisord 的 `user=`）。切换到**其他**用户要求 starfleet 以 root 运行；与 starfleet 同用户时无特权要求 |
 | `autostart` | bool | `true` | starfleet 启动时是否自动拉起 |
 | `autorestart` | string | `unexpected` | `true`=总是重启 / `false`=不重启 / `unexpected`=非预期退出码才重启 |
 | `startsecs` | int | `1` | 启动后运行满该秒数才算成功 |
-| `startretries` | int | `3` | 进入 FATAL 前的最大重试次数 |
+| `startretries` | int | `3` | **连续启动失败**（进程未运行满 startsecs 就退出）达到该次数进入 FATAL。成功启动后再崩溃的进程按 `autorestart` 无限重试（退避递增，上限 backoff_limit）— 与 supervisord 语义一致，网络抖动型服务不会被放弃 |
 | `stopsignal` | string | `SIGTERM` | 停止时发送的信号（SIGTERM/SIGINT/SIGQUIT/SIGHUP/SIGKILL/SIGUSR1/SIGUSR2） |
 | `stopwaitsecs` | int | `10` | 等待优雅退出秒数，超时发 SIGKILL |
 | `exitcodes` | []int | `[0]` | 预期的正常退出码（配合 `autorestart: unexpected`） |
@@ -131,7 +131,7 @@ server:
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `path` | string | — | 日志文件路径（stdout 输出同时进入内存环形缓冲，可在 WebUI/TUI 查看） |
+| `path` | string | — | 日志文件路径。进程输出同时写入该文件（超过 `maxbytes` 按 supervisord 规则轮转为 `.1`…`.N`），并进入内存环形缓冲（可在 WebUI/TUI/`starfleet logs` 查看） |
 | `maxbytes` | string | `50M` | 单文件大小上限（支持 `K/M/G`） |
 | `backups` | int | `10` | 轮转保留份数 |
 
@@ -151,12 +151,18 @@ server:
 ```
 STOPPED ──start()──→ STARTING ──→ RUNNING
                         │            │
-                   启动失败     意外退出
+                未满 startsecs  运行后退出
+                就退出(启动失败)   （含网络抖动）
                         ↓            ↓
-                     BACKOFF ──→ FATAL（超出 startretries）
-                        │
-                     退避后重试 → STARTING
+               startFailures++    BACKOFF（无限重试，
+                        │          退避递增至 backoff_limit）
+                        ↓
+              FATAL（连续启动失败 ≥ startretries）
 ```
+
+- **FATAL 只由"启动失败"触发**：进程必须活过 `startsecs` 才算启动成功；
+  成功启动后又退出的进程会一直按退避策略重启（这是 frpc 等网络服务需要的行为）。
+- 从 FATAL / STOPPED 手动 `start` 会重置失败计数。
 
 ### 3.5 完整示例
 

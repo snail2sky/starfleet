@@ -1,8 +1,10 @@
 package config
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -10,17 +12,22 @@ import (
 // ReloadFunc is called when config changes are detected.
 type ReloadFunc func(newCfg *Config) error
 
-// Watcher watches a config file for changes and triggers reloads.
+// Watcher polls the configuration every interval and triggers a reload
+// when ANY loaded file changes — the main config, an include, or a
+// conf_dir fragment (including files being added or removed).
 type Watcher struct {
 	path     string
 	interval time.Duration
-	lastMod  time.Time
 	callback ReloadFunc
 	stopCh   chan struct{}
-	mu       sync.Mutex
+
+	mu      sync.Mutex
+	lastFP  string // fingerprint of all loaded files at last check
+	started bool
 }
 
-// NewWatcher creates a new config watcher.
+// NewWatcher creates a config watcher for path (the main config file).
+// The callback receives a freshly loaded Config on change.
 func NewWatcher(path string, interval time.Duration, callback ReloadFunc) *Watcher {
 	return &Watcher{
 		path:     path,
@@ -30,7 +37,8 @@ func NewWatcher(path string, interval time.Duration, callback ReloadFunc) *Watch
 	}
 }
 
-// Start begins watching the config file. It polls at the configured interval.
+// Start begins watching. The first successful load only records the
+// baseline (startup already loaded the config itself).
 func (w *Watcher) Start() {
 	go func() {
 		ticker := time.NewTicker(w.interval)
@@ -53,23 +61,42 @@ func (w *Watcher) Stop() {
 }
 
 func (w *Watcher) check() {
-	info, err := os.Stat(w.path)
+	cfg, err := Load(w.path)
 	if err != nil {
+		slog.Error("config watcher: reload failed", "error", err)
 		return
 	}
-	mod := info.ModTime()
+	fp := fingerprint(cfg)
+
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if mod.After(w.lastMod) {
-		w.lastMod = mod
-		newCfg, err := Load(w.path)
-		if err != nil {
-			slog.Error("config reload failed", "error", err)
-			return
-		}
-		slog.Info("config file changed, reloading")
-		if err := w.callback(newCfg); err != nil {
-			slog.Error("config reload callback failed", "error", err)
+	if !w.started {
+		// Baseline only — the caller already loaded this config at startup.
+		w.started = true
+		w.lastFP = fp
+		return
+	}
+	if fp == w.lastFP {
+		return
+	}
+	w.lastFP = fp
+	slog.Info("config change detected, reloading",
+		"files", len(cfg.LoadedFiles), "processes", len(cfg.Processes))
+	if err := w.callback(cfg); err != nil {
+		slog.Error("config reload callback failed", "error", err)
+	}
+}
+
+// fingerprint summarizes every loaded file's identity and mtime.
+// Adding/removing files (conf.d) or editing content both change it.
+func fingerprint(cfg *Config) string {
+	var b strings.Builder
+	for _, p := range cfg.LoadedFiles {
+		if st, err := os.Stat(p); err == nil {
+			fmt.Fprintf(&b, "%s:%d;", p, st.ModTime().UnixNano())
+		} else {
+			fmt.Fprintf(&b, "%s:gone;", p)
 		}
 	}
+	return b.String()
 }

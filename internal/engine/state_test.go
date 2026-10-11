@@ -71,3 +71,28 @@ func TestParseState(t *testing.T) {
 		})
 	}
 }
+
+func TestShouldFatal(t *testing.T) {
+	tests := []struct {
+		name          string
+		startFailures int
+		maxRetries    int
+		startedOK     bool
+		want          bool
+	}{
+		{"healthy run never fatalizes", 99, 3, true, false},
+		{"start failures below limit", 2, 3, false, false},
+		{"start failures at limit", 3, 3, false, true},
+		{"start failures above limit", 5, 3, false, true},
+		{"zero limit defaults to one", 1, 0, false, true},
+		{"first healthy run clears", 0, 3, true, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldFatal(tt.startFailures, tt.maxRetries, tt.startedOK); got != tt.want {
+				t.Errorf("shouldFatal(%d, %d, %v) = %v, want %v",
+					tt.startFailures, tt.maxRetries, tt.startedOK, got, tt.want)
+			}
+		})
+	}
+}

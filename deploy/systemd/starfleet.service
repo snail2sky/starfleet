@@ -1,19 +1,15 @@
 [Unit]
 Description=Starfleet Process Manager
-Documentation=https://github.com/snail-sky/starfleet
+Documentation=https://github.com/snail2sky/starfleet
 After=network.target
 
 [Service]
 Type=simple
-User=root
-ExecStart=/usr/local/bin/starfleet -config /etc/starfleet/starfleet.yml
-ExecReload=/bin/kill -HUP $MAINPID
+# Runs as root so per-process `user:` switching works (supervisord parity).
+ExecStart=/usr/local/bin/starfleet serve -c /etc/starfleet/starfleet.yml --log /var/log/starfleet.log
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=65536
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=starfleet
 
 [Install]
 WantedBy=multi-user.target
