@@ -60,6 +60,10 @@ Open http://localhost:8080 in your browser.
 
 ## Configuration
 
+> 📖 **Full configuration reference: [docs/configuration.md](docs/configuration.md)**
+> — every supported field, config file layout (`conf_dir` / `conf.d` / `includes`),
+> hot-reload behaviour, and a supervisord migration table.
+
 ```yaml
 server:
   host: "0.0.0.0"

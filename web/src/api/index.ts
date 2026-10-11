@@ -92,12 +92,22 @@ export const stopProcess = (name: string) => api.post(`/processes/${name}/stop`)
 export const restartProcess = (name: string) => api.post(`/processes/${name}/restart`)
 
 // Log API
+/** Special source selector value: starfleet's own server logs. */
+export const SERVER_SOURCE = '__server__'
+
 export const getProcessLogs = (name: string, lines = 200, stream?: string) =>
   api.get<{ data: LogEntry[] }>(
     `/processes/${name}/logs?lines=${lines}` + (stream ? `&stream=${stream}` : ''),
   )
 export const getAllLogs = (lines = 200) =>
   api.get<{ data: LogEntry[] }>(`/logs?lines=${lines}`)
+export const getServerLogs = (lines = 200) =>
+  api.get<{ data: LogEntry[] }>(`/server/logs?lines=${lines}`)
+
+/** Stream values that should render as error (server logs use levels). */
+export function isErrStream(stream: string): boolean {
+  return stream === 'stderr' || stream === 'ERROR' || stream === 'FATAL' || stream === 'PANIC'
+}
 
 // System API
 export const getSystemOverview = () => api.get<{ data: SystemOverview }>('/system/overview')

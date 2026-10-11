@@ -1,12 +1,16 @@
 # Starfleet Process Manager Configuration
 # https://github.com/snail2sky/starfleet
-
-# Include additional config files or directories.
-# Processes and schedules from included files are merged into the main config.
-# The conf.d/ directory is auto-included if it exists next to this file.
+# Full reference: docs/configuration.md
+#
+# Managed configs (processes/schedules) can live in separate files:
+#   conf_dir: managed          # explicit directory (relative to this file,
+#                               # or absolute). Must exist when set.
+# Without conf_dir, ./conf.d/*.yml is auto-loaded when that directory exists.
+#
+# Additional includes (merged before conf_dir; later wins on conflicts):
 # includes:
 #   - "extra-processes.yml"
-#   - "/etc/starfleet/conf.d/"
+#   - "/etc/starfleet/sites/"
 
 server:
   host: "0.0.0.0"

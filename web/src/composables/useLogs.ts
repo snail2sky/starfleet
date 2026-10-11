@@ -1,12 +1,13 @@
 import { ref, onUnmounted, watch, type Ref } from 'vue'
-import { getProcessLogs, getAllLogs, type LogEntry } from '@/api'
+import { getProcessLogs, getAllLogs, getServerLogs, SERVER_SOURCE, type LogEntry } from '@/api'
 
 /**
  * Polls the logs API on an interval and keeps a bounded buffer.
- * Used by the Logs page (all processes) and the process log dialog.
+ * The process ref accepts: a process name, '' / null (all processes),
+ * or SERVER_SOURCE (starfleet's own logs).
  */
 export function useLogs(options: {
-  /** Process name, or null/'' for logs from all processes */
+  /** Process name, SERVER_SOURCE, or null/'' for logs from all processes */
   process: Ref<string | null>
   /** Poll interval in ms (default 2000) */
   interval?: number
@@ -35,7 +36,14 @@ export function useLogs(options: {
     loading.value = true
     try {
       const proc = options.process.value
-      const res = proc ? await getProcessLogs(proc, fetchLines) : await getAllLogs(fetchLines)
+      let res
+      if (proc === SERVER_SOURCE) {
+        res = await getServerLogs(fetchLines)
+      } else if (proc) {
+        res = await getProcessLogs(proc, fetchLines)
+      } else {
+        res = await getAllLogs(fetchLines)
+      }
       entries.value = res.data.data ?? []
       if (entries.value.length > maxLines) {
         entries.value = entries.value.slice(-maxLines)

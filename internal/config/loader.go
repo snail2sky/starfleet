@@ -10,29 +10,56 @@ import (
 )
 
 // Load reads and parses a YAML configuration file with include support.
-// It supports:
-//   - Main config file (starfleet.yml)
-//   - includes: list of files/directories to include
-//   - Auto-include conf.d/*.yml if conf.d/ exists next to main config
+// Merge order (later wins on key conflicts):
+//  1. the main config file
+//  2. every entry in `includes:` (in order)
+//  3. the managed config directory: `conf_dir` when set (must exist),
+//     otherwise <main config dir>/conf.d when that directory exists.
 func Load(path string) (*Config, error) {
 	cfg, err := loadFile(path)
 	if err != nil {
 		return nil, err
 	}
 
-	// Auto-include conf.d/ if it exists next to the main config.
-	dir := filepath.Dir(path)
-	confD := filepath.Join(dir, "conf.d")
-	if info, statErr := os.Stat(confD); statErr == nil && info.IsDir() {
-		if err := cfg.loadDir(confD); err != nil {
-			return nil, fmt.Errorf("load conf.d: %w", err)
-		}
+	if err := loadConfDir(cfg, path); err != nil {
+		return nil, err
 	}
 
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)
 	}
 	return cfg, nil
+}
+
+// loadConfDir merges the managed-config directory into cfg.
+func loadConfDir(cfg *Config, mainPath string) error {
+	mainDir := filepath.Dir(mainPath)
+	if cfg.ConfDir != "" {
+		dir := cfg.ConfDir
+		if !filepath.IsAbs(dir) {
+			dir = filepath.Join(mainDir, dir)
+		}
+		info, err := os.Stat(dir)
+		if err != nil {
+			return fmt.Errorf("conf_dir %q: %w", cfg.ConfDir, err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("conf_dir %q is not a directory", cfg.ConfDir)
+		}
+		if err := cfg.loadDir(dir); err != nil {
+			return fmt.Errorf("load conf_dir %s: %w", dir, err)
+		}
+		return nil
+	}
+
+	// Auto-discovery: conf.d next to the main config, optional.
+	auto := filepath.Join(mainDir, "conf.d")
+	if info, err := os.Stat(auto); err == nil && info.IsDir() {
+		if err := cfg.loadDir(auto); err != nil {
+			return fmt.Errorf("load conf.d: %w", err)
+		}
+	}
+	return nil
 }
 
 // loadFile loads a single YAML config file and merges it.

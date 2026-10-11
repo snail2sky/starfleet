@@ -6,14 +6,13 @@
         <p class="page-sub">Auto-refreshes every {{ interval / 1000 }}s · buffered in memory (last 500 lines)</p>
       </div>
       <div class="page-head__actions">
-        <select class="select" v-model="selected" aria-label="Filter by process">
+        <select class="select" v-model="selected" aria-label="Filter by source">
           <option value="">All processes</option>
+          <option :value="SERVER_SOURCE">★ starfleet (server)</option>
           <option v-for="p in processes" :key="p.name" :value="p.name">{{ p.name }}</option>
         </select>
         <select class="select" v-model="stream" aria-label="Filter by stream">
-          <option value="">stdout + stderr</option>
-          <option value="stdout">stdout only</option>
-          <option value="stderr">stderr only</option>
+          <option v-for="[val, label] in streamOptions" :key="val" :value="val">{{ label }}</option>
         </select>
         <label class="chk">
           <input type="checkbox" v-model="autoScroll" /> follow
@@ -32,20 +31,24 @@
           <template v-if="loading"> · fetching…</template>
         </template>
       </span>
-      <span class="status-strip__right">{{ selected || 'all processes' }}</span>
+      <span class="status-strip__right">{{ sourceLabel }}</span>
     </div>
 
     <div class="log-box" ref="logBox">
       <div v-if="visible.length === 0" class="empty">
         <strong>No log output yet.</strong><br />
-        Logs appear here as soon as managed processes write to stdout/stderr.
+        {{
+          isServer
+            ? "Starfleet's own log lines appear here once it has logged something."
+            : 'Logs appear here as soon as managed processes write to stdout/stderr.'
+        }}
       </div>
       <div v-for="(e, i) in visible" :key="e.timestamp + '-' + i" class="log-line log-lines">
         <span class="log-line__ts">{{ fmtTs(e.timestamp) }}</span>
         <span class="log-line__proc">{{ e.process }}</span>
         <span
           class="log-line__src"
-          :class="{ 'log-line__src--err': e.stream === 'stderr' }"
+          :class="{ 'log-line__src--err': isErrStream(e.stream) }"
           >{{ e.stream }}</span
         >
         <span class="log-line__text">{{ e.line }}</span>
@@ -55,10 +58,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useProcessStore } from '@/stores/process'
 import { useLogs } from '@/composables/useLogs'
+import { SERVER_SOURCE, isErrStream } from '@/api'
 
 const interval = 2000
 const processStore = useProcessStore()
@@ -68,6 +72,34 @@ const selected = ref<string | null>(null)
 const stream = ref('')
 const autoScroll = ref(true)
 const logBox = ref<HTMLElement | null>(null)
+
+const isServer = computed(() => selected.value === SERVER_SOURCE)
+const sourceLabel = computed(() => {
+  if (selected.value === SERVER_SOURCE) return 'starfleet (server)'
+  return selected.value || 'all processes'
+})
+
+// Stream options depend on the source: processes expose stdout/stderr,
+// starfleet's own logs expose log levels.
+const streamOptions = computed<[string, string][]>(() =>
+  isServer.value
+    ? [
+        ['', 'all levels'],
+        ['ERROR', 'errors only'],
+        ['WARN', 'warnings only'],
+        ['INFO', 'info only'],
+      ]
+    : [
+        ['', 'stdout + stderr'],
+        ['stdout', 'stdout only'],
+        ['stderr', 'stderr only'],
+      ],
+)
+
+// Reset the stream filter when the source changes (its options differ).
+watch(selected, () => {
+  stream.value = ''
+})
 
 const { entries, loading, error, lastFetch, start, refresh } = useLogs({
   process: selected,

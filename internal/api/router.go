@@ -58,6 +58,9 @@ func NewRouter(mgr *engine.Manager, sched *scheduler.Scheduler, hub *ws.Hub, cfg
 		// Aggregated logs across all processes.
 		v1.GET("/logs", handler.AllLogs)
 
+		// Starfleet's own server logs.
+		v1.GET("/server/logs", handler.ServerLogs)
+
 		// Schedules.
 		schedules := v1.Group("/schedules")
 		{

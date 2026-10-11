@@ -7,7 +7,13 @@ import (
 
 // Config is the root configuration structure.
 type Config struct {
-	Includes      []string                  `yaml:"includes" json:"includes,omitempty"`
+	// Includes lists extra config files/directories merged after the main file.
+	Includes []string `yaml:"includes" json:"includes,omitempty"`
+	// ConfDir is the directory holding managed config fragments
+	// (processes/schedules split into separate .yml files).
+	// Relative paths resolve against the main config's directory.
+	// When empty, <main config dir>/conf.d is auto-loaded if it exists.
+	ConfDir       string                    `yaml:"conf_dir" json:"conf_dir,omitempty"`
 	Server        ServerConfig              `yaml:"server" json:"server"`
 	Processes     map[string]ProcessConfig  `yaml:"processes" json:"processes"`
 	Schedules     map[string]ScheduleConfig `yaml:"schedules" json:"schedules"`

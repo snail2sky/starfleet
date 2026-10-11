@@ -152,7 +152,7 @@
         </div>
         <div v-for="(e, i) in logEntries" :key="e.timestamp + '-' + i" class="log-line log-lines">
           <span class="log-line__ts">{{ fmtTs(e.timestamp) }}</span>
-          <span class="log-line__src" :class="{ 'log-line__src--err': e.stream === 'stderr' }">{{ e.stream }}</span>
+          <span class="log-line__src" :class="{ 'log-line__src--err': isErrStream(e.stream) }">{{ e.stream }}</span>
           <span class="log-line__text">{{ e.line }}</span>
         </div>
       </div>
@@ -162,7 +162,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
-import { getProcess, type ProcessInfo, type ProcessConfig } from '@/api'
+import { getProcess, isErrStream, type ProcessInfo, type ProcessConfig } from '@/api'
 import { useLogs } from '@/composables/useLogs'
 
 const props = defineProps<{

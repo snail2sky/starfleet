@@ -40,6 +40,7 @@ type Model struct {
 
 	// Log view
 	logName    string
+	logServer  bool // viewing starfleet's own logs instead of a process
 	logEntries []engine.LogEntry
 	logScroll  int
 	logLoaded  bool // true once first fetch completed for current process
@@ -191,6 +192,15 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.tab = (m.tab + 1) % len(tabs)
 		m.viewMode = ViewList
 		return m, nil
+
+	case key.Matches(msg, key.NewBinding(key.WithKeys("0"))):
+		// Starfleet's own server logs.
+		m.logServer = true
+		m.logName = ""
+		m.logEntries = m.fetchLogs("")
+		m.logScroll = 0
+		m.viewMode = ViewLogs
+		return m, nil
 	}
 
 	// View-specific keys.
@@ -227,6 +237,7 @@ func (m Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Show logs for selected process.
 			name := m.selectedProcess()
 			if name != "" {
+				m.logServer = false
 				m.logName = name
 				m.logEntries = m.fetchLogs(name)
 				m.logScroll = 0
@@ -282,6 +293,7 @@ func (m Model) handleDetailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, key.NewBinding(key.WithKeys("l"))):
 		// Switch from detail view to the log view of the same process.
 		if m.detailName != "" {
+			m.logServer = false
 			m.logName = m.detailName
 			m.logEntries = m.fetchLogs(m.logName)
 			m.logScroll = 0
@@ -296,6 +308,14 @@ func (m Model) handleLogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, key.NewBinding(key.WithKeys("esc", "backspace", "q"))):
 		m.viewMode = ViewList
+	case key.Matches(msg, key.NewBinding(key.WithKeys("s"))):
+		// Toggle source: starfleet server logs <-> process logs.
+		m.logServer = !m.logServer
+		if !m.logServer && m.logName == "" {
+			m.logName = m.detailName
+		}
+		m.logEntries = m.fetchLogs(m.logName)
+		m.logScroll = 0
 	case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k"))):
 		if m.logScroll > 0 {
 			m.logScroll--
@@ -487,7 +507,11 @@ func (m *Model) buildDetail(name string) []string {
 // Log view — renders captured log entries (same source as the WebUI).
 func (m Model) viewLogs() string {
 	count := len(m.logEntries)
-	title := TitleStyle.Render(fmt.Sprintf("📜 Logs: %s", m.logName))
+	source := m.logName
+	if m.logServer {
+		source = "starfleet (server)"
+	}
+	title := TitleStyle.Render(fmt.Sprintf("📜 Logs: %s", source))
 	meta := MutedStyle.Render(fmt.Sprintf("  %d lines · auto-refresh 1s", count))
 
 	maxLines := m.height - 11
@@ -534,10 +558,17 @@ func (m Model) viewLogs() string {
 	return lipgloss.JoinVertical(lipgloss.Left, title+meta, "", body, "", footer)
 }
 
-// fetchLogs pulls recent lines for a process from the active manager
-// (local ring buffer or remote API) — the same data the WebUI shows.
+// fetchLogs pulls recent lines from the active manager — starfleet's own
+// server logs when logServer is set, otherwise the process's output.
+// The same data sources the WebUI shows.
 func (m *Model) fetchLogs(name string) []engine.LogEntry {
-	if m.manager == nil || name == "" {
+	if m.manager == nil {
+		return nil
+	}
+	if m.logServer {
+		return m.manager.ServerLogs(500)
+	}
+	if name == "" {
 		return nil
 	}
 	return m.manager.Logs(name, 500)
@@ -560,9 +591,10 @@ func (m Model) viewHelp() string {
     1, 2, 3          Jump to tab
     Enter            View process details
     l                View process logs
+    0                View starfleet's own server logs
 
   Process Actions
-    s                Start selected process
+    s                Start selected process (list view)
     t                Stop selected process
     r                Restart selected process
 
@@ -571,6 +603,7 @@ func (m Model) viewHelp() string {
     ↑↓               Scroll content
     g / G            Jump to top / bottom
     l                Switch from detail to logs
+    s                Toggle log source: server <-> process (log view)
 
   General
     q / Ctrl+C       Quit

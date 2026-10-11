@@ -223,6 +223,7 @@ func (j *Job) Info() JobInfo {
 		Cron:    j.Config.Cron,
 		Type:    j.Config.Type,
 		Command: j.Config.Command,
+		URL:     j.Config.URL,
 		Enabled: j.Config.Enabled,
 		Timeout: j.Config.Timeout.String(),
 		Labels:  j.Config.Labels,
@@ -235,6 +236,7 @@ type JobInfo struct {
 	Cron    string            `json:"cron"`
 	Type    string            `json:"type"`
 	Command string            `json:"command"`
+	URL     string            `json:"url,omitempty"`
 	Enabled bool              `json:"enabled"`
 	Timeout string            `json:"timeout"`
 	Labels  map[string]string `json:"labels"`

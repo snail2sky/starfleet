@@ -17,6 +17,7 @@ import (
 	"github.com/snail2sky/starfleet/internal/event"
 	"github.com/snail2sky/starfleet/internal/notify"
 	"github.com/snail2sky/starfleet/internal/scheduler"
+	"github.com/snail2sky/starfleet/internal/selflog"
 	"github.com/snail2sky/starfleet/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -29,13 +30,12 @@ var (
 
 // Shared flags (persistent across subcommands).
 var cfgPath string
+var serverURL string // control commands: override server address
 
 // serve-only flags.
 var (
-	daemonMode   bool
-	logFile      string
-	tuiLegacy    bool   // deprecated alias: -tui on the root command
-	statusServer string // `status --server` override
+	daemonMode bool
+	logFile    string
 )
 
 var rootCmd = &cobra.Command{
@@ -44,12 +44,21 @@ var rootCmd = &cobra.Command{
 	Long: `Starfleet manages long-running processes and scheduled tasks with a
 web dashboard, terminal UI, real-time logs, health checks and hot-reload.
 
-Examples:
+Server:
   starfleet serve -c /etc/starfleet/starfleet.yml   # run the server
-  starfleet tui                                     # terminal UI (connects to server if up)
   starfleet validate -c starfleet.yml               # check config and exit
-  starfleet status                                  # query a running server
-  starfleet version                                 # print version`,
+
+Terminal UI:
+  starfleet tui                                     # connects to server if up
+
+Control a running server:
+  starfleet status                                  # process states
+  starfleet start|stop|restart <process>
+  starfleet reload                                  # hot-reload config
+  starfleet logs [process] [-n 500] [-f]            # server or process logs
+  starfleet schedules                               # list scheduled jobs
+  starfleet run <schedule>                          # trigger a job now
+  starfleet version`,
 	// Root without a subcommand = serve (keeps `starfleet -config x` working).
 	RunE:              runServe,
 	SilenceUsage:      true,
@@ -96,12 +105,11 @@ var versionCmd = &cobra.Command{
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgPath, "config", "c", "starfleet.yml", "path to configuration file")
+	rootCmd.PersistentFlags().StringVar(&serverURL, "server", "", "server URL for control commands, e.g. http://192.168.1.100:8099 (default: from config)")
 	rootCmd.Flags().BoolVarP(&daemonMode, "daemon", "d", false, "run as background daemon (logs to file)")
 	rootCmd.Flags().StringVar(&logFile, "log", "", "log file path (default: stdout; auto-set in daemon/TUI mode)")
-	rootCmd.Flags().BoolVar(&tuiLegacy, "tui", false, "deprecated: use the `tui` subcommand")
 
 	tuiCmd.Flags().StringVar(&logFile, "log", "", "log file path (default: <config dir>/starfleet-tui.log)")
-	statusCmd.Flags().StringVar(&statusServer, "server", "", "server URL, e.g. http://192.168.1.100:8099 (default: from config)")
 
 	// serve duplicates the root flags so `starfleet serve -d --log x` works
 	// (root-local flags are not inherited by subcommands).
@@ -134,10 +142,16 @@ func resolveLogPath(tui bool) string {
 	return ""
 }
 
-// setupLogger configures structured logging and returns the writer in use.
+// setupLogger configures structured logging (JSON to destination) and
+// mirrors records into the selflog ring so the API/WebUI/TUI can show
+// starfleet's own logs. Returns the opened file, if any.
 func setupLogger(path string) *os.File {
+	opts := &slog.HandlerOptions{Level: slog.LevelInfo}
+	wrap := func(inner slog.Handler) {
+		slog.SetDefault(slog.New(selflog.NewHandler(inner, selflog.Default())))
+	}
 	if path == "" {
-		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
+		wrap(slog.NewJSONHandler(os.Stdout, opts))
 		return nil
 	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
@@ -150,17 +164,12 @@ func setupLogger(path string) *os.File {
 		os.Stdout = f
 		os.Stderr = f
 	}
-	slog.SetDefault(slog.New(slog.NewJSONHandler(f, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	wrap(slog.NewJSONHandler(f, opts))
 	return f
 }
 
 // runServe starts the API server and all managed processes.
 func runServe(cmd *cobra.Command, args []string) error {
-	// Deprecated -tui flag on the root command.
-	if tuiLegacy {
-		return runTUI(cmd, args)
-	}
-
 	logPath := resolveLogPath(false)
 	setupLogger(logPath)
 
@@ -321,26 +330,16 @@ func runValidate(cmd *cobra.Command, args []string) error {
 
 // runStatus queries a running starfleet server and prints process status.
 func runStatus(cmd *cobra.Command, args []string) error {
-	base := statusServer
-	if base == "" {
-		cfg, err := config.Load(cfgPath)
-		if err != nil {
-			return fmt.Errorf("load config (or pass --server): %w", err)
-		}
-		host := cfg.Server.Host
-		if host == "0.0.0.0" || host == "" {
-			host = "127.0.0.1"
-		}
-		base = fmt.Sprintf("http://%s:%d", host, cfg.Server.Port)
+	c, err := resolveClient()
+	if err != nil {
+		return err
 	}
-
-	mgr := tui.NewRemoteManager(base)
-	procs := mgr.List()
+	procs := c.List()
 	if len(procs) == 0 {
-		return fmt.Errorf("no response from %s (is starfleet running?)", base)
+		return fmt.Errorf("no response from %s (is starfleet running?)", c.Base())
 	}
 
-	fmt.Printf("starfleet at %s\n\n", base)
+	fmt.Printf("starfleet at %s\n\n", c.Base())
 	fmt.Printf("%-24s %-10s %-8s %-14s %-6s\n", "NAME", "STATE", "PID", "UPTIME", "RETRY")
 	for _, p := range procs {
 		uptime := "—"

@@ -36,12 +36,16 @@ type Process struct {
 
 // NewProcess creates a new Process from configuration.
 func NewProcess(name string, cfg config.ProcessConfig) *Process {
+	// doneCh starts closed: no runLoop is active yet, so the first Start()
+	// does not block waiting for a previous one.
+	done := make(chan struct{})
+	close(done)
 	return &Process{
 		Name:   name,
 		Config: cfg,
 		state:  StateStopped,
 		stopCh: make(chan struct{}, 1),
-		doneCh: make(chan struct{}),
+		doneCh: done,
 		logger: slog.With("process", name),
 	}
 }
@@ -100,9 +104,16 @@ func (p *Process) Start() error {
 	}
 	p.state = StateStarting
 	p.retryCount = 0
+	prevDone := p.doneCh
 	p.stopCh = make(chan struct{}, 1)
 	p.doneCh = make(chan struct{})
 	p.mu.Unlock()
+
+	// Wait for any previous runLoop goroutine to exit completely.
+	// Without this, Restart() (Stop+Start) could leave two runLoops
+	// racing: the old one's autorestart and the new one both spawn
+	// processes, causing port conflicts and FATAL cascades.
+	<-prevDone
 
 	go p.runLoop()
 	return nil
@@ -118,6 +129,7 @@ func (p *Process) Stop() error {
 	p.state = StateStopping
 	cmd := p.cmd
 	waitDone := p.waitDone
+	runDone := p.doneCh // closed when the runLoop goroutine fully exits
 	p.mu.Unlock()
 
 	select {
@@ -142,6 +154,14 @@ func (p *Process) Stop() error {
 				<-waitDone
 			}
 		}
+	}
+
+	// Wait for the runLoop goroutine to exit so the state machine is fully
+	// quiescent before this returns (Start may follow immediately).
+	select {
+	case <-runDone:
+	case <-time.After(time.Duration(p.Config.StopWaitSecs)*time.Second + 2*time.Second):
+		p.logger.Warn("runLoop did not exit in time")
 	}
 
 	p.mu.Lock()
@@ -176,6 +196,14 @@ func (p *Process) runLoop() {
 			p.mu.Unlock()
 			return
 		default:
+		}
+
+		// Re-check state: Stop() may have arrived between iterations.
+		p.mu.RLock()
+		st := p.state
+		p.mu.RUnlock()
+		if st == StateStopped || st == StateStopping {
+			return
 		}
 
 		p.runOnce()
@@ -319,6 +347,15 @@ func (p *Process) runOnce() {
 	}
 
 	p.mu.Lock()
+	if p.state == StateStopping || p.state == StateStopped {
+		// A Stop() raced our start: kill the fresh process and unwind
+		// without publishing it (Stop owns the quiescence protocol).
+		p.mu.Unlock()
+		p.logger.Info("stop raced process start, killing fresh process", "pid", cmd.Process.Pid)
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return
+	}
 	p.cmd = cmd
 	p.pid = cmd.Process.Pid
 	p.startTime = time.Now()
