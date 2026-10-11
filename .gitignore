@@ -15,7 +15,10 @@ coverage.html
 # Frontend
 web/node_modules/
 web/dist/
-internal/api/dist/
+# Keep the embed target directory present so `go build` works on a fresh
+# clone (the real frontend is copied here by `make frontend`).
+internal/api/dist/*
+!internal/api/dist/.gitkeep
 
 # IDE
 .idea/

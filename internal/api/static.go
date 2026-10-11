@@ -16,9 +16,26 @@ var distFS embed.FS
 func ServeStatic(r *gin.Engine) {
 	dist, err := fs.Sub(distFS, "dist")
 	if err != nil {
-		// If dist doesn't exist (dev mode), skip static serving.
 		return
 	}
+
+	// Fresh clones only contain .gitkeep — the UI is added by `make frontend`.
+	// Tell the user instead of serving a directory listing.
+	if _, statErr := dist.Open("index.html"); statErr != nil {
+		r.NoRoute(func(c *gin.Context) {
+			path := c.Request.URL.Path
+			if strings.HasPrefix(path, "/api") || strings.HasPrefix(path, "/health") {
+				c.JSON(404, gin.H{"error": "not found"})
+				return
+			}
+			c.String(http.StatusServiceUnavailable,
+				"starfleet web UI is not embedded in this binary.\n"+
+					"Build it with: make frontend && go build ./cmd/starfleet/\n"+
+					"API is available under /api/v1/\n")
+		})
+		return
+	}
+
 	fileServer := http.FileServer(http.FS(dist))
 
 	r.NoRoute(func(c *gin.Context) {
