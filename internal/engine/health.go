@@ -15,11 +15,11 @@ import (
 
 // HealthChecker monitors process health and triggers restarts.
 type HealthChecker struct {
-	mu      sync.RWMutex
-	checks  map[string]*healthCheck
-	bus     *event.Bus
-	stopCh  chan struct{}
-	logger  *slog.Logger
+	mu     sync.RWMutex
+	checks map[string]*healthCheck
+	bus    *event.Bus
+	stopCh chan struct{}
+	logger *slog.Logger
 }
 
 type healthCheck struct {

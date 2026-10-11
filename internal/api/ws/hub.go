@@ -21,8 +21,8 @@ const (
 
 // Message is a WebSocket message.
 type Message struct {
-	Type    MessageType     `json:"type"`
-	Payload interface{}     `json:"payload"`
+	Type    MessageType `json:"type"`
+	Payload interface{} `json:"payload"`
 }
 
 // Client represents a WebSocket client connection.
@@ -61,7 +61,7 @@ func (h *Hub) Stop() {
 	close(h.stopCh)
 	h.mu.Lock()
 	for _, client := range h.clients {
-		client.Conn.CloseNow()
+		_ = client.Conn.CloseNow()
 	}
 	h.clients = make(map[int]*Client)
 	h.mu.Unlock()
@@ -122,7 +122,7 @@ func (h *Hub) HandleWebSocket(filter MessageType) gin.HandlerFunc {
 			h.mu.Lock()
 			delete(h.clients, client.ID)
 			h.mu.Unlock()
-			conn.CloseNow()
+			_ = conn.CloseNow()
 			slog.Info("websocket client disconnected", "id", client.ID)
 		}()
 

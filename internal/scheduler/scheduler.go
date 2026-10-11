@@ -16,12 +16,12 @@ import (
 
 // Scheduler manages scheduled tasks.
 type Scheduler struct {
-	mu       sync.RWMutex
-	cron     *cron.Cron
-	jobs     map[string]*Job
-	history  *History
-	bus      *event.Bus
-	logger   *slog.Logger
+	mu      sync.RWMutex
+	cron    *cron.Cron
+	jobs    map[string]*Job
+	history *History
+	bus     *event.Bus
+	logger  *slog.Logger
 }
 
 // NewScheduler creates a new scheduler.
@@ -219,13 +219,13 @@ func (j *Job) runHTTP(entry HistoryEntry) HistoryEntry {
 // Info returns job information.
 func (j *Job) Info() JobInfo {
 	return JobInfo{
-		Name:      j.Name,
-		Cron:      j.Config.Cron,
-		Type:      j.Config.Type,
-		Command:   j.Config.Command,
-		Enabled:   j.Config.Enabled,
-		Timeout:   j.Config.Timeout.String(),
-		Labels:    j.Config.Labels,
+		Name:    j.Name,
+		Cron:    j.Config.Cron,
+		Type:    j.Config.Type,
+		Command: j.Config.Command,
+		Enabled: j.Config.Enabled,
+		Timeout: j.Config.Timeout.String(),
+		Labels:  j.Config.Labels,
 	}
 }
 

@@ -4,18 +4,18 @@ import "github.com/charmbracelet/lipgloss"
 
 // Color palette (matching web UI dark theme).
 var (
-	Primary   = lipgloss.Color("#38bdf8")
-	Success   = lipgloss.Color("#4ade80")
-	Warning   = lipgloss.Color("#facc15")
-	Error     = lipgloss.Color("#f87171")
-	Purple    = lipgloss.Color("#a78bfa")
-	Orange    = lipgloss.Color("#fb923c")
-	Muted     = lipgloss.Color("#64748b")
-	Subtle    = lipgloss.Color("#334155")
-	BgDark    = lipgloss.Color("#0f172a")
-	BgCard    = lipgloss.Color("#1e293b")
-	Text      = lipgloss.Color("#e2e8f0")
-	TextDim   = lipgloss.Color("#94a3b8")
+	Primary = lipgloss.Color("#38bdf8")
+	Success = lipgloss.Color("#4ade80")
+	Warning = lipgloss.Color("#facc15")
+	Error   = lipgloss.Color("#f87171")
+	Purple  = lipgloss.Color("#a78bfa")
+	Orange  = lipgloss.Color("#fb923c")
+	Muted   = lipgloss.Color("#64748b")
+	Subtle  = lipgloss.Color("#334155")
+	BgDark  = lipgloss.Color("#0f172a")
+	BgCard  = lipgloss.Color("#1e293b")
+	Text    = lipgloss.Color("#e2e8f0")
+	TextDim = lipgloss.Color("#94a3b8")
 )
 
 // Common styles.

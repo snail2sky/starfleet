@@ -34,25 +34,25 @@ type AuthConfig struct {
 
 // ProcessConfig defines a managed process.
 type ProcessConfig struct {
-	Command      string            `yaml:"command" json:"command"`
-	Directory    string            `yaml:"directory" json:"directory"`
-	User         string            `yaml:"user" json:"user"`
-	Autostart    bool              `yaml:"autostart" json:"autostart"`
-	Autorestart  string            `yaml:"autorestart" json:"autorestart"` // "true", "false", "unexpected"
-	StartSecs    int               `yaml:"startsecs" json:"startsecs"`
-	StartRetries int               `yaml:"startretries" json:"startretries"`
-	StopSignal   string            `yaml:"stopsignal" json:"stopsignal"`
-	StopWaitSecs int               `yaml:"stopwaitsecs" json:"stopwaitsecs"`
-	ExitCodes    []int             `yaml:"exitcodes" json:"exitcodes,omitempty"`
-	Environment  map[string]string `yaml:"environment" json:"environment,omitempty"`
-	EnvFile      string            `yaml:"envfile" json:"envfile,omitempty"`
-	StdoutLog    LogConfig         `yaml:"stdout" json:"stdout"`
-	StderrLog    LogConfig         `yaml:"stderr" json:"stderr"`
+	Command      string             `yaml:"command" json:"command"`
+	Directory    string             `yaml:"directory" json:"directory"`
+	User         string             `yaml:"user" json:"user"`
+	Autostart    bool               `yaml:"autostart" json:"autostart"`
+	Autorestart  string             `yaml:"autorestart" json:"autorestart"` // "true", "false", "unexpected"
+	StartSecs    int                `yaml:"startsecs" json:"startsecs"`
+	StartRetries int                `yaml:"startretries" json:"startretries"`
+	StopSignal   string             `yaml:"stopsignal" json:"stopsignal"`
+	StopWaitSecs int                `yaml:"stopwaitsecs" json:"stopwaitsecs"`
+	ExitCodes    []int              `yaml:"exitcodes" json:"exitcodes,omitempty"`
+	Environment  map[string]string  `yaml:"environment" json:"environment,omitempty"`
+	EnvFile      string             `yaml:"envfile" json:"envfile,omitempty"`
+	StdoutLog    LogConfig          `yaml:"stdout" json:"stdout"`
+	StderrLog    LogConfig          `yaml:"stderr" json:"stderr"`
 	HealthCheck  *HealthCheckConfig `yaml:"healthcheck" json:"healthcheck,omitempty"`
-	Labels       map[string]string `yaml:"labels" json:"labels,omitempty"`
-	DependsOn    []string          `yaml:"depends_on" json:"depends_on,omitempty"`
-	RestartDelay time.Duration     `yaml:"restart_delay" json:"restart_delay"`
-	BackoffLimit time.Duration     `yaml:"backoff_limit" json:"backoff_limit"`
+	Labels       map[string]string  `yaml:"labels" json:"labels,omitempty"`
+	DependsOn    []string           `yaml:"depends_on" json:"depends_on,omitempty"`
+	RestartDelay time.Duration      `yaml:"restart_delay" json:"restart_delay"`
+	BackoffLimit time.Duration      `yaml:"backoff_limit" json:"backoff_limit"`
 }
 
 // LogConfig defines log file settings.

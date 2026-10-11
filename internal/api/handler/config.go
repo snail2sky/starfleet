@@ -9,8 +9,8 @@ import (
 
 // ConfigHandler handles configuration API requests.
 type ConfigHandler struct {
-	cfg       *config.Config
-	reloadFn  func() error
+	cfg      *config.Config
+	reloadFn func() error
 }
 
 // NewConfigHandler creates a new ConfigHandler.

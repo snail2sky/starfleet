@@ -36,7 +36,9 @@ func TestProcessListEmpty(t *testing.T) {
 		t.Errorf("expected 200, got %d", w.Code)
 	}
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("bad json: %v", err)
+	}
 	data := resp["data"].([]interface{})
 	if len(data) != 0 {
 		t.Errorf("expected 0 processes, got %d", len(data))
@@ -61,7 +63,9 @@ func TestProcessListWithConfig(t *testing.T) {
 		t.Errorf("expected 200, got %d", w.Code)
 	}
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("bad json: %v", err)
+	}
 	data := resp["data"].([]interface{})
 	if len(data) != 1 {
 		t.Errorf("expected 1 process, got %d", len(data))
@@ -100,7 +104,9 @@ func TestProcessGetFound(t *testing.T) {
 		t.Errorf("expected 200, got %d", w.Code)
 	}
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("bad json: %v", err)
+	}
 	data := resp["data"].(map[string]interface{})
 	if data["name"] != "test" {
 		t.Errorf("expected name test, got %s", data["name"])
@@ -150,7 +156,9 @@ func TestSystemOverview(t *testing.T) {
 		t.Errorf("expected 200, got %d", w.Code)
 	}
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("bad json: %v", err)
+	}
 	data := resp["data"].(map[string]interface{})
 	if _, ok := data["host"]; !ok {
 		t.Error("expected host in response")

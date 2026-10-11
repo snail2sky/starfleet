@@ -372,4 +372,3 @@ func splitCommand(cmd string) []string {
 	}
 	return args
 }
-

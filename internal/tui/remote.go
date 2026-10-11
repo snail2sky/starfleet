@@ -44,8 +44,8 @@ func (l *LocalManager) Get(name string) (*engine.ProcessInfo, error) {
 func (l *LocalManager) Config(name string) (config.ProcessConfig, error) {
 	return l.mgr.GetConfig(name)
 }
-func (l *LocalManager) Start(name string) error  { return l.mgr.Start(name) }
-func (l *LocalManager) Stop(name string) error   { return l.mgr.Stop(name) }
+func (l *LocalManager) Start(name string) error   { return l.mgr.Start(name) }
+func (l *LocalManager) Stop(name string) error    { return l.mgr.Stop(name) }
 func (l *LocalManager) Restart(name string) error { return l.mgr.Restart(name) }
 
 // Logs reads captured lines from the in-process log collector.
@@ -57,8 +57,8 @@ func (l *LocalManager) Mode() string { return "local" }
 
 // RemoteManager talks to a running starfleet server via REST API.
 type RemoteManager struct {
-	base  string
-	http  *http.Client
+	base string
+	http *http.Client
 }
 
 // NewRemoteManager creates a manager backed by the server API.
@@ -112,9 +112,13 @@ func (r *RemoteManager) Config(name string) (config.ProcessConfig, error) {
 	return out.Config, nil
 }
 
-func (r *RemoteManager) Start(name string) error  { return r.post("/api/v1/processes/" + name + "/start") }
-func (r *RemoteManager) Stop(name string) error   { return r.post("/api/v1/processes/" + name + "/stop") }
-func (r *RemoteManager) Restart(name string) error { return r.post("/api/v1/processes/" + name + "/restart") }
+func (r *RemoteManager) Start(name string) error {
+	return r.post("/api/v1/processes/" + name + "/start")
+}
+func (r *RemoteManager) Stop(name string) error { return r.post("/api/v1/processes/" + name + "/stop") }
+func (r *RemoteManager) Restart(name string) error {
+	return r.post("/api/v1/processes/" + name + "/restart")
+}
 
 // Logs fetches recent log lines from the server API.
 func (r *RemoteManager) Logs(name string, lines int) []engine.LogEntry {

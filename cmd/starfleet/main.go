@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/snail2sky/starfleet/internal/api"
 	"github.com/snail2sky/starfleet/internal/api/ws"
 	"github.com/snail2sky/starfleet/internal/config"
@@ -19,6 +18,7 @@ import (
 	"github.com/snail2sky/starfleet/internal/notify"
 	"github.com/snail2sky/starfleet/internal/scheduler"
 	"github.com/snail2sky/starfleet/internal/tui"
+	"github.com/spf13/cobra"
 )
 
 var (
@@ -32,9 +32,9 @@ var cfgPath string
 
 // serve-only flags.
 var (
-	daemonMode  bool
-	logFile     string
-	tuiLegacy   bool   // deprecated alias: -tui on the root command
+	daemonMode   bool
+	logFile      string
+	tuiLegacy    bool   // deprecated alias: -tui on the root command
 	statusServer string // `status --server` override
 )
 
@@ -241,7 +241,9 @@ func runServe(cmd *cobra.Command, args []string) error {
 		sig := <-sigCh
 		if sig == syscall.SIGHUP {
 			slog.Info("received SIGHUP, reloading configuration")
-			reloadConfig()
+			if err := reloadConfig(); err != nil {
+				slog.Error("SIGHUP reload failed", "error", err)
+			}
 			continue
 		}
 		slog.Info("received signal, shutting down", "signal", sig)

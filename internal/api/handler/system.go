@@ -8,8 +8,8 @@ import (
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/host"
-	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/shirou/gopsutil/v4/load"
+	"github.com/shirou/gopsutil/v4/mem"
 )
 
 // SystemHandler handles system information API requests.
@@ -30,21 +30,21 @@ func (h *SystemHandler) Overview(c *gin.Context) {
 
 	data := gin.H{
 		"host": gin.H{
-			"hostname":  hostInfo.Hostname,
-			"os":        hostInfo.OS,
-			"platform":  hostInfo.Platform,
-			"kernel":    hostInfo.KernelVersion,
-			"uptime":    hostInfo.Uptime,
+			"hostname":   hostInfo.Hostname,
+			"os":         hostInfo.OS,
+			"platform":   hostInfo.Platform,
+			"kernel":     hostInfo.KernelVersion,
+			"uptime":     hostInfo.Uptime,
 			"go_version": runtime.Version(),
 		},
 		"cpu": gin.H{
-			"cores":  runtime.NumCPU(),
+			"cores":   runtime.NumCPU(),
 			"percent": cpuPercent,
 		},
 		"memory": gin.H{
 			"total":     vm.Total,
 			"used":      vm.Used,
-			"available":  vm.Available,
+			"available": vm.Available,
 			"percent":   vm.UsedPercent,
 		},
 		"disk": gin.H{

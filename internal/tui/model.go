@@ -25,15 +25,14 @@ const (
 
 // Model is the main TUI model.
 type Model struct {
-	manager   Manager
-	width     int
-	height    int
-	viewMode  ViewMode
-	tab       int // 0=processes, 1=schedules, 2=help
+	manager  Manager
+	width    int
+	height   int
+	viewMode ViewMode
+	tab      int // 0=processes, 1=schedules, 2=help
 
 	// Process list
-	procTable   table.Model
-	procRows    []table.Row
+	procTable table.Model
 
 	// Detail view
 	detailName  string
@@ -97,11 +96,11 @@ func NewModel(manager Manager) Model {
 	)
 
 	return Model{
-		manager:   manager,
-		viewMode:  ViewList,
-		procTable: pt,
+		manager:    manager,
+		viewMode:   ViewList,
+		procTable:  pt,
 		schedTable: st,
-		spinner:   s,
+		spinner:    s,
 	}
 }
 
@@ -237,22 +236,31 @@ func (m Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("s"))):
 			name := m.selectedProcess()
 			if name != "" {
-				m.manager.Start(name)
-				m.showMessage(fmt.Sprintf("✓ Started %s", name))
+				if err := m.manager.Start(name); err != nil {
+					m.showMessage(fmt.Sprintf("✗ %v", err))
+				} else {
+					m.showMessage(fmt.Sprintf("✓ Started %s", name))
+				}
 			}
 
 		case key.Matches(msg, key.NewBinding(key.WithKeys("t"))):
 			name := m.selectedProcess()
 			if name != "" {
-				m.manager.Stop(name)
-				m.showMessage(fmt.Sprintf("✓ Stopped %s", name))
+				if err := m.manager.Stop(name); err != nil {
+					m.showMessage(fmt.Sprintf("✗ %v", err))
+				} else {
+					m.showMessage(fmt.Sprintf("✓ Stopped %s", name))
+				}
 			}
 
 		case key.Matches(msg, key.NewBinding(key.WithKeys("r"))):
 			name := m.selectedProcess()
 			if name != "" {
-				m.manager.Restart(name)
-				m.showMessage(fmt.Sprintf("✓ Restarted %s", name))
+				if err := m.manager.Restart(name); err != nil {
+					m.showMessage(fmt.Sprintf("✗ %v", err))
+				} else {
+					m.showMessage(fmt.Sprintf("✓ Restarted %s", name))
+				}
 			}
 		}
 

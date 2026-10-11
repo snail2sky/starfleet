@@ -120,17 +120,17 @@ func (m *Manager) GetProcess(name string) (*Process, bool) {
 
 // ProcessInfo holds runtime information about a process.
 type ProcessInfo struct {
-	Name       string            `json:"name"`
-	State      string            `json:"state"`
-	PID        int               `json:"pid"`
-	Uptime     string            `json:"uptime"`
-	ExitCode   int               `json:"exit_code"`
-	RetryCount int               `json:"retry_count"`
-	Command    string            `json:"command"`
-	Directory  string            `json:"directory"`
-	Autostart  bool              `json:"autostart"`
-	Autorestart string           `json:"autorestart"`
-	Labels     map[string]string `json:"labels"`
+	Name        string            `json:"name"`
+	State       string            `json:"state"`
+	PID         int               `json:"pid"`
+	Uptime      string            `json:"uptime"`
+	ExitCode    int               `json:"exit_code"`
+	RetryCount  int               `json:"retry_count"`
+	Command     string            `json:"command"`
+	Directory   string            `json:"directory"`
+	Autostart   bool              `json:"autostart"`
+	Autorestart string            `json:"autorestart"`
+	Labels      map[string]string `json:"labels"`
 }
 
 // GetConfig returns the full configuration of a process.

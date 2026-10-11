@@ -31,9 +31,9 @@ type Event struct {
 
 // Subscriber receives events.
 type Subscriber struct {
-	ID       int
-	Ch       chan Event
-	Filter   []EventType // if empty, receives all events
+	ID     int
+	Ch     chan Event
+	Filter []EventType // if empty, receives all events
 }
 
 // Bus is an in-process event bus with topic filtering.
