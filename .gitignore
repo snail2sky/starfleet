@@ -30,3 +30,7 @@ Thumbs.db
 # Env
 .env
 .env.local
+# runtime logs
+*-tui.log
+*.log
+!deploy/**/*.log
