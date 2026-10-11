@@ -24,10 +24,17 @@ Starfleet is a modern alternative to supervisord, designed for managing long-run
 
 ### Install
 
+Prebuilt binaries for **linux/amd64, linux/arm64, linux/armv7, darwin/amd64,
+darwin/arm64** are attached to every [release](https://github.com/snail2sky/starfleet/releases)
+(with `checksums.txt`). Linux amd64 example:
+
 ```bash
-# Download latest release
-curl -sL https://github.com/snail2sky/starfleet/releases/latest/download/starfleet-linux-amd64 -o starfleet
-chmod +x starfleet
+VER=v0.1.0
+curl -sL -o starfleet.tar.gz \
+  "https://github.com/snail2sky/starfleet/releases/download/${VER}/starfleet_${VER}_linux_amd64.tar.gz"
+tar xzf starfleet.tar.gz
+sudo mv starfleet_${VER}_linux_amd64/starfleet /usr/local/bin/
+starfleet version
 
 # Or build from source
 git clone https://github.com/snail2sky/starfleet.git
