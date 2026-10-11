@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  starfleet:
+    image: ghcr.io/snail-sky/starfleet:latest
+    container_name: starfleet
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./starfleet.yml:/etc/starfleet/starfleet.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - STARFLEET_LOG_LEVEL=info

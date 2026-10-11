@@ -1,0 +1,68 @@
+# Starfleet Process Manager Configuration
+# https://github.com/snail-sky/starfleet
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  read_timeout: 30s
+  write_timeout: 30s
+  auth:
+    enabled: false
+    # username: admin
+    # password: "your-password"  # Use: htpasswd -nbBC 10 "" "your-password" | cut -d: -f2
+    # secret: "your-jwt-secret-at-least-32-chars"
+
+# Process definitions
+processes:
+  # Example: Nginx web server
+  # nginx:
+  #   command: "nginx -g 'daemon off;'"
+  #   directory: /etc/nginx
+  #   autostart: true
+  #   autorestart: "true"
+  #   startsecs: 3
+  #   startretries: 5
+  #   stopsignal: SIGTERM
+  #   stopwaitsecs: 10
+  #   stdout:
+  #     path: /var/log/nginx/stdout.log
+  #     maxbytes: "100M"
+  #     backups: 5
+  #   stderr:
+  #     path: /var/log/nginx/stderr.log
+  #     maxbytes: "50M"
+  #     backups: 3
+  #   healthcheck:
+  #     type: http
+  #     url: "http://127.0.0.1/health"
+  #     interval: 30s
+  #     timeout: 5s
+  #     retries: 3
+  #   labels:
+  #     group: web
+  #     tier: frontend
+
+# Scheduled tasks
+schedules:
+  # Example: Database backup every day at 3am
+  # db_backup:
+  #   cron: "0 3 * * *"
+  #   command: "pg_dump mydb > /backups/mydb-$(date +%Y%m%d).sql"
+  #   timeout: 300s
+  #   enabled: true
+
+# Logging configuration
+logging:
+  level: info
+  format: json
+  output: stdout
+
+# Notification channels
+notifications:
+  webhook:
+    enabled: false
+    # url: "https://hooks.slack.com/services/..."
+    # events:
+    #   - process_exit
+    #   - process_fatal
+    #   - health_check_fail

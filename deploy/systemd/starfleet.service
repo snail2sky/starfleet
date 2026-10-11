@@ -1,0 +1,19 @@
+[Unit]
+Description=Starfleet Process Manager
+Documentation=https://github.com/snail-sky/starfleet
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/starfleet -config /etc/starfleet/starfleet.yml
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=starfleet
+
+[Install]
+WantedBy=multi-user.target
