@@ -1,7 +1,7 @@
 # Binaries
 bin/
-starfleet
-starfleet.exe
+/starfleet
+/starfleet.exe
 *.exe
 *.exe~
 *.dll
