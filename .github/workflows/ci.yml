@@ -79,6 +79,7 @@ jobs:
         run: |
           npm ci
           npx vite build
+          rm -rf ../internal/api/dist
           cp -r dist ../internal/api/dist
       - name: Build Binary
         env:

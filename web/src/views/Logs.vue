@@ -68,7 +68,9 @@ const interval = 2000
 const processStore = useProcessStore()
 const { processes } = storeToRefs(processStore)
 
-const selected = ref<string | null>(null)
+// Default source: starfleet's own server logs (switch to a process or
+// "All processes" via the selector).
+const selected = ref<string | null>(SERVER_SOURCE)
 const stream = ref('')
 const autoScroll = ref(true)
 const logBox = ref<HTMLElement | null>(null)

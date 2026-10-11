@@ -19,6 +19,13 @@ type Config struct {
 	Schedules     map[string]ScheduleConfig `yaml:"schedules" json:"schedules"`
 	Logging       LoggingConfig             `yaml:"logging" json:"logging"`
 	Notifications NotificationsConfig       `yaml:"notifications" json:"notifications"`
+	// LoadedFiles lists every config file that contributed (main file first,
+	// then includes, then managed-config fragments). Runtime info only —
+	// never serialized back to YAML.
+	LoadedFiles []string `yaml:"-" json:"loaded_files,omitempty"`
+	// ConfDirResolved is the absolute managed-config directory actually used
+	// (from conf_dir or auto-discovered conf.d). Runtime info only.
+	ConfDirResolved string `yaml:"-" json:"conf_dir_resolved,omitempty"`
 }
 
 // ServerConfig is the HTTP server configuration.

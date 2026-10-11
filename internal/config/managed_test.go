@@ -302,3 +302,45 @@ notifications:
 		t.Error("save/load round trip changed data")
 	}
 }
+
+func TestLoadedFilesTracking(t *testing.T) {
+	dir := t.TempDir()
+	main := "includes:\n  - extra.yml\nconf_dir: managed\n"
+	if err := os.WriteFile(filepath.Join(dir, "starfleet.yml"), []byte(main), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "extra.yml"), []byte("processes:\n  a:\n    command: echo a\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "managed"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "managed", "b.yml"), []byte("processes:\n  b:\n    command: echo b\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(filepath.Join(dir, "starfleet.yml"))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	// main file first, then includes, then conf_dir fragments.
+	if len(cfg.LoadedFiles) != 3 {
+		t.Fatalf("expected 3 loaded files, got %#v", cfg.LoadedFiles)
+	}
+	if filepath.Base(cfg.LoadedFiles[0]) != "starfleet.yml" {
+		t.Errorf("first loaded file should be the main config, got %s", cfg.LoadedFiles[0])
+	}
+	if filepath.Base(cfg.LoadedFiles[1]) != "extra.yml" {
+		t.Errorf("second loaded file should be the include, got %s", cfg.LoadedFiles[1])
+	}
+	if filepath.Base(cfg.LoadedFiles[2]) != "b.yml" {
+		t.Errorf("third loaded file should be the conf_dir fragment, got %s", cfg.LoadedFiles[2])
+	}
+
+	// Resolved conf dir must point at the absolute managed directory.
+	wantResolved := filepath.Join(dir, "managed")
+	if cfg.ConfDirResolved != wantResolved {
+		t.Errorf("ConfDirResolved: want %s, got %s", wantResolved, cfg.ConfDirResolved)
+	}
+}

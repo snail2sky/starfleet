@@ -320,11 +320,30 @@ notifications:
 
 ## 8. 配置校验
 
-启动前可离线校验（列出全部进程/调度并检查字段合法性）：
+启动前可离线校验（列出全部进程/调度并检查字段合法性）。
+`validate` 会**明示托管配置的来源**（conf_dir 或自动发现的 conf.d）以及
+实际加载的每一个配置文件，方便排查"某个进程定义来自哪里"：
 
 ```bash
 starfleet validate -c starfleet.yml
 ```
+
+```
+✓ configuration is valid: /etc/starfleet/starfleet.yml
+  server:    0.0.0.0:8080
+  auth:      false
+  conf dir:  /etc/starfleet/conf.d (auto-discovered conf.d)
+  loaded 3 config file(s):
+    - /etc/starfleet/starfleet.yml
+    - /etc/starfleet/sites/extra.yml
+    - /etc/starfleet/conf.d/nginx.yml
+  processes: 2
+    - nginx                     auto    autorestart=true
+  schedules: 1
+    - cleanup                   enabled  0 4 * * 0
+```
+
+同样的信息可通过 `GET /api/v1/config` 查看（`loaded_files` / `conf_dir_resolved` 字段）。
 
 校验规则（启动也会执行）：
 

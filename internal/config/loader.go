@@ -32,6 +32,7 @@ func Load(path string) (*Config, error) {
 }
 
 // loadConfDir merges the managed-config directory into cfg.
+// It records the resolved directory in cfg.ConfDirResolved.
 func loadConfDir(cfg *Config, mainPath string) error {
 	mainDir := filepath.Dir(mainPath)
 	if cfg.ConfDir != "" {
@@ -46,6 +47,7 @@ func loadConfDir(cfg *Config, mainPath string) error {
 		if !info.IsDir() {
 			return fmt.Errorf("conf_dir %q is not a directory", cfg.ConfDir)
 		}
+		cfg.ConfDirResolved = dir
 		if err := cfg.loadDir(dir); err != nil {
 			return fmt.Errorf("load conf_dir %s: %w", dir, err)
 		}
@@ -55,6 +57,7 @@ func loadConfDir(cfg *Config, mainPath string) error {
 	// Auto-discovery: conf.d next to the main config, optional.
 	auto := filepath.Join(mainDir, "conf.d")
 	if info, err := os.Stat(auto); err == nil && info.IsDir() {
+		cfg.ConfDirResolved = auto
 		if err := cfg.loadDir(auto); err != nil {
 			return fmt.Errorf("load conf.d: %w", err)
 		}
@@ -72,6 +75,7 @@ func loadFile(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("parse config %s: %w", path, err)
 	}
+	cfg.LoadedFiles = []string{path}
 
 	// Process includes.
 	for _, inc := range cfg.Includes {
@@ -125,6 +129,7 @@ func (c *Config) loadDir(dir string) error {
 // merge merges another config into this one.
 // Processes and schedules from the other config override existing ones.
 func (c *Config) merge(other *Config) {
+	c.LoadedFiles = append(c.LoadedFiles, other.LoadedFiles...)
 	for k, v := range other.Processes {
 		if c.Processes == nil {
 			c.Processes = make(map[string]ProcessConfig)

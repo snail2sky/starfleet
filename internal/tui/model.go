@@ -134,8 +134,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		m.refreshData()
-		// Auto-refresh log view every tick (1s).
-		if m.viewMode == ViewLogs && m.logName != "" {
+		// Auto-refresh the log view every tick (1s) — both server and
+		// process sources (fetchLogs picks the right one).
+		if m.viewMode == ViewLogs {
 			m.refreshLogs()
 		}
 		if m.msgTimer > 0 {
@@ -200,6 +201,20 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.logEntries = m.fetchLogs("")
 		m.logScroll = 0
 		m.viewMode = ViewLogs
+		return m, nil
+
+	// ← → switch tabs from anywhere (leaving detail/log views first).
+	case key.Matches(msg, key.NewBinding(key.WithKeys("left"))):
+		if m.tab > 0 {
+			m.tab--
+			m.viewMode = ViewList
+		}
+		return m, nil
+	case key.Matches(msg, key.NewBinding(key.WithKeys("right"))):
+		if m.tab < len(tabs)-1 {
+			m.tab++
+			m.viewMode = ViewList
+		}
 		return m, nil
 	}
 
@@ -368,7 +383,23 @@ func (m Model) View() string {
 	}
 
 	status := m.renderStatusBar()
-	return lipgloss.JoinVertical(lipgloss.Left, header, "", content, "", status)
+	main := lipgloss.JoinVertical(lipgloss.Left, header, "", content)
+	return pinFooter(main, status, m.height)
+}
+
+// pinFooter renders main and then pads blank lines so footer sits on the
+// LAST row of the viewport (instead of floating right below short content).
+func pinFooter(main, footer string, height int) string {
+	if height <= 0 {
+		return main + "\n\n" + footer
+	}
+	used := strings.Count(main, "\n") + 1
+	footerRows := strings.Count(footer, "\n") + 1
+	pad := height - used - footerRows
+	if pad < 1 {
+		pad = 1
+	}
+	return main + strings.Repeat("\n", pad) + footer
 }
 
 func (m Model) renderTabs() string {
@@ -387,7 +418,7 @@ func (m Model) renderStatusBar() string {
 	var left string
 	switch m.tab {
 	case 0:
-		left = HelpStyle.Render("↑↓ move  Enter detail  l logs  s start  t stop  r restart  q quit")
+		left = HelpStyle.Render("↑↓ move  ←→ tabs  Enter detail  l logs  0 srv logs  s start  t stop  r restart  q quit")
 	case 1:
 		left = HelpStyle.Render("↑↓ move  q quit")
 	default:
@@ -415,7 +446,8 @@ func (m Model) viewDetail() string {
 
 	footer := HelpStyle.Render("  Esc/backspace: back  l: logs  s: start  t: stop  r: restart")
 
-	return lipgloss.JoinVertical(lipgloss.Left, title, "", content, "", footer)
+	main := lipgloss.JoinVertical(lipgloss.Left, title, "", content)
+	return pinFooter(main, footer, m.height)
 }
 
 func (m *Model) buildDetail(name string) []string {
@@ -553,9 +585,10 @@ func (m Model) viewLogs() string {
 		body = lipgloss.NewStyle().Padding(0, 2).Render(strings.TrimRight(sb.String(), "\n"))
 	}
 
-	footer := HelpStyle.Render("  ↑↓ scroll  g/G top/bottom  Esc: back  (auto-refreshes)")
+	footer := HelpStyle.Render("  ↑↓ scroll  g/G top/bottom  s: toggle source  Esc: back  (auto-refreshes 1s)")
 
-	return lipgloss.JoinVertical(lipgloss.Left, title+meta, "", body, "", footer)
+	main := lipgloss.JoinVertical(lipgloss.Left, title+meta, "", body)
+	return pinFooter(main, footer, m.height)
 }
 
 // fetchLogs pulls recent lines from the active manager — starfleet's own
@@ -587,7 +620,8 @@ func (m Model) viewHelp() string {
 
   Navigation
     ↑/k, ↓/j        Move cursor up/down
-    Tab              Switch tab
+    ←/→             Previous / next tab (from any view)
+    Tab              Switch tab (forward)
     1, 2, 3          Jump to tab
     Enter            View process details
     l                View process logs

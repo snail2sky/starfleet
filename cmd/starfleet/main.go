@@ -309,6 +309,19 @@ func runValidate(cmd *cobra.Command, args []string) error {
 	fmt.Printf("✓ configuration is valid: %s\n", cfgPath)
 	fmt.Printf("  server:    %s:%d\n", cfg.Server.Host, cfg.Server.Port)
 	fmt.Printf("  auth:      %v\n", cfg.Server.Auth.Enabled)
+	if cfg.ConfDirResolved != "" {
+		src := "auto-discovered conf.d"
+		if cfg.ConfDir != "" {
+			src = "conf_dir"
+		}
+		fmt.Printf("  conf dir:  %s (%s)\n", cfg.ConfDirResolved, src)
+	}
+	if len(cfg.LoadedFiles) > 0 {
+		fmt.Printf("  loaded %d config file(s):\n", len(cfg.LoadedFiles))
+		for _, f := range cfg.LoadedFiles {
+			fmt.Printf("    - %s\n", f)
+		}
+	}
 	fmt.Printf("  processes: %d\n", len(cfg.Processes))
 	for name, p := range cfg.Processes {
 		status := "auto"
