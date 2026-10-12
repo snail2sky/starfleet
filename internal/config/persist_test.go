@@ -89,6 +89,67 @@ func TestSetProcessAutostartErrors(t *testing.T) {
 	}
 }
 
+func TestSetProcessAutorestart(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "svc.yml")
+	original := `# keep me
+processes:
+  svc:
+    command: "run me"   # comment survives
+    autorestart: "unexpected"
+    autostart: true
+`
+	if err := os.WriteFile(path, []byte(original), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Valid policy: rewritten as a quoted string, comments preserved.
+	if err := SetProcessAutorestart(path, "svc", "true"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	s, _ := os.ReadFile(path)
+	if !strings.Contains(string(s), `autorestart: "true"`) {
+		t.Errorf("policy not written as string:\n%s", s)
+	}
+	for _, want := range []string{"# keep me", "# comment survives", "autostart: true"} {
+		if !strings.Contains(string(s), want) {
+			t.Errorf("lost content %q:\n%s", want, s)
+		}
+	}
+
+	// Round-trip to another valid value.
+	if err := SetProcessAutorestart(path, "svc", "false"); err != nil {
+		t.Fatalf("set false: %v", err)
+	}
+	s2, _ := os.ReadFile(path)
+	if !strings.Contains(string(s2), `autorestart: "false"`) {
+		t.Errorf("second set failed:\n%s", s2)
+	}
+
+	// Invalid policy rejected, file untouched.
+	if err := SetProcessAutorestart(path, "svc", "sometimes"); err == nil {
+		t.Error("expected error for invalid policy")
+	}
+	s3, _ := os.ReadFile(path)
+	if string(s3) != string(s2) {
+		t.Error("file changed despite rejected policy")
+	}
+
+	// Missing key is appended (plain scalar is fine — loader reads it as a string).
+	noKey := filepath.Join(dir, "bare.yml")
+	if err := os.WriteFile(noKey, []byte("processes:\n  b:\n    command: echo\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetProcessAutorestart(noKey, "b", "unexpected"); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	sb, _ := os.ReadFile(noKey)
+	if !strings.Contains(string(sb), "autorestart: unexpected") &&
+		!strings.Contains(string(sb), `autorestart: "unexpected"`) {
+		t.Errorf("key not appended:\n%s", sb)
+	}
+}
+
 func TestProcessSourcesTracking(t *testing.T) {
 	dir := t.TempDir()
 	main := "processes:\n  shared:\n    command: from-main\nincludes:\n  - extra.yml\n"

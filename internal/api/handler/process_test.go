@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/snail2sky/starfleet/internal/api/middleware"
 	"github.com/snail2sky/starfleet/internal/config"
 	"github.com/snail2sky/starfleet/internal/engine"
 )
@@ -130,7 +131,7 @@ func TestProcessStartNotFound(t *testing.T) {
 func TestHealthEndpoint(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := NewSystemHandler()
+	h := NewSystemHandler(middleware.NewAuthState(middleware.AuthConfig{Enabled: false}))
 	r.GET("/health", h.Health)
 
 	w := httptest.NewRecorder()
@@ -140,12 +141,19 @@ func TestHealthEndpoint(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", w.Code)
 	}
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("bad json: %v", err)
+	}
+	if resp["auth"] != false {
+		t.Errorf("expected auth=false, got %v", resp["auth"])
+	}
 }
 
 func TestSystemOverview(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := NewSystemHandler()
+	h := NewSystemHandler(middleware.NewAuthState(middleware.AuthConfig{Enabled: false}))
 	r.GET("/api/v1/system/overview", h.Overview)
 
 	w := httptest.NewRecorder()

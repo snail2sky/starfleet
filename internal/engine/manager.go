@@ -148,6 +148,35 @@ func (m *Manager) SetAutostart(name string, enabled bool) error {
 	return nil
 }
 
+// SetAutorestart changes the restart policy ("true", "false", "unexpected")
+// at runtime: in the stored config and, when the process object exists, in
+// the live instance the exit-loop reads. Persistence to the config file is
+// the API layer's job (SetAutorestartPersister).
+func (m *Manager) SetAutorestart(name, policy string) error {
+	switch policy {
+	case "true", "false", "unexpected":
+	default:
+		return fmt.Errorf("autorestart must be true, false, or unexpected (got %q)", policy)
+	}
+	m.mu.Lock()
+	cfg, ok := m.configs[name]
+	if !ok {
+		m.mu.Unlock()
+		return fmt.Errorf("process %q not found", name)
+	}
+	cfg.Autorestart = policy
+	m.configs[name] = cfg
+	p := m.processes[name]
+	m.mu.Unlock()
+
+	if p != nil {
+		p.mu.Lock()
+		p.Config.Autorestart = policy
+		p.mu.Unlock()
+	}
+	return nil
+}
+
 // GetConfig returns the full configuration of a process.
 func (m *Manager) GetConfig(name string) (config.ProcessConfig, error) {
 	m.mu.RLock()

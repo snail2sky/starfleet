@@ -18,6 +18,8 @@ import (
 var (
 	logLines  int
 	logFollow bool
+	flagUser  string // --user: auth username override
+	flagPass  string // --password: auth password override
 )
 
 var startCmd = &cobra.Command{
@@ -199,19 +201,46 @@ var schedulesCmd = &cobra.Command{
 }
 
 // resolveClient builds an API client from --server or the config file.
+// Credentials come from --user/--password, then STARFLEET_USER/
+// STARFLEET_PASSWORD, then auth.* from the config (config only when the
+// server address also comes from the config — never sent to --server).
 func resolveClient() (*client.Client, error) {
-	if serverURL != "" {
-		return client.New(serverURL), nil
+	var auth config.AuthConfig
+	base := serverURL
+	if base == "" {
+		if err := resolveConfigFlag(); err != nil {
+			return nil, fmt.Errorf("load config (or pass --server): %w", err)
+		}
+		cfg, err := config.Load(cfgPath)
+		if err != nil {
+			return nil, fmt.Errorf("load config (or pass --server): %w", err)
+		}
+		host := cfg.Server.Host
+		if host == "0.0.0.0" || host == "" {
+			host = "127.0.0.1"
+		}
+		base = fmt.Sprintf("http://%s:%d", host, cfg.Server.Port)
+		auth = cfg.Server.Auth
 	}
-	cfg, err := config.Load(cfgPath)
-	if err != nil {
-		return nil, fmt.Errorf("load config (or pass --server): %w", err)
+	c := client.New(base)
+
+	user, pass := flagUser, flagPass
+	if user == "" {
+		user = os.Getenv("STARFLEET_USER")
 	}
-	host := cfg.Server.Host
-	if host == "0.0.0.0" || host == "" {
-		host = "127.0.0.1"
+	if pass == "" {
+		pass = os.Getenv("STARFLEET_PASSWORD")
 	}
-	return client.New(fmt.Sprintf("http://%s:%d", host, cfg.Server.Port)), nil
+	// Use config credentials whenever they exist — even while auth is
+	// disabled on disk: the server may still enforce the old settings
+	// until this very reload applies them.
+	if user == "" && pass == "" && (auth.Username != "" || auth.Password != "") {
+		user, pass = auth.Username, auth.Password
+	}
+	if user != "" || pass != "" {
+		c.SetAuth(user, pass)
+	}
+	return c, nil
 }
 
 // printLogEntries writes entries as: 15:04:05.000 [STREAM] process line
@@ -225,6 +254,10 @@ func printLogEntries(entries []engine.LogEntry) {
 func init() {
 	logsCmd.Flags().IntVarP(&logLines, "lines", "n", 100, "number of log lines to show")
 	logsCmd.Flags().BoolVarP(&logFollow, "follow", "f", false, "poll for new lines until interrupted")
+
+	// Auth overrides for control commands (default: config, then env).
+	rootCmd.PersistentFlags().StringVar(&flagUser, "user", "", "auth username (default: config auth.username or $STARFLEET_USER)")
+	rootCmd.PersistentFlags().StringVar(&flagPass, "password", "", "auth password (default: config auth.password or $STARFLEET_PASSWORD)")
 
 	// status's --server lives on the root as a persistent flag; nothing to
 	// register here for the other commands.

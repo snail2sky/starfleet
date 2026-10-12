@@ -16,30 +16,29 @@ type Router struct {
 }
 
 // NewRouter creates and configures the API router.
-// persistAutostart writes process enable/disable back to config files;
-// persistSchedule does the same for scheduled jobs (both optional).
-func NewRouter(mgr *engine.Manager, sched *scheduler.Scheduler, hub *ws.Hub, cfg *config.Config, reloadFn func() error, persistAutostart func(name string, enabled bool) error, persistSchedule func(name string, enabled bool) error) *Router {
+// auth is the live auth state (updates via config reload apply immediately);
+// loadCfg lets GET /config read the config from disk instead of the startup
+// snapshot. persistAutostart/persistAutorestart write process toggles back
+// to config files; persistScheduleEnabled does the same for scheduled jobs
+// (all optional).
+func NewRouter(mgr *engine.Manager, sched *scheduler.Scheduler, hub *ws.Hub, cfg *config.Config, auth *middleware.AuthState, loadCfg func() (*config.Config, error), reloadFn func() error, persistAutostart func(name string, enabled bool) error, persistAutorestart func(name string, value string) error, persistSchedule func(name string, enabled bool) error) *Router {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(middleware.CORS())
 	r.Use(middleware.Logger())
 
-	// Auth middleware.
-	authCfg := middleware.AuthConfig{
-		Enabled:  cfg.Server.Auth.Enabled,
-		Username: cfg.Server.Auth.Username,
-		Password: cfg.Server.Auth.Password,
-		Secret:   cfg.Server.Auth.Secret,
-	}
-
 	// Handlers.
 	processH := handler.NewProcessHandler(mgr)
 	if persistAutostart != nil {
 		processH.SetAutostartPersister(persistAutostart)
 	}
-	systemH := handler.NewSystemHandler()
-	configH := handler.NewConfigHandler(cfg, reloadFn)
+	if persistAutorestart != nil {
+		processH.SetAutorestartPersister(persistAutorestart)
+	}
+	systemH := handler.NewSystemHandler(auth)
+	authH := handler.NewAuthHandler(auth)
+	configH := handler.NewConfigHandler(cfg, loadCfg, reloadFn)
 	scheduleH := handler.NewScheduleHandler(sched)
 	if persistSchedule != nil {
 		scheduleH.SetEnabledPersister(persistSchedule)
@@ -48,9 +47,12 @@ func NewRouter(mgr *engine.Manager, sched *scheduler.Scheduler, hub *ws.Hub, cfg
 	// Health check (no auth required).
 	r.GET("/health", systemH.Health)
 
+	// Login issues a token for the WebUI (no auth required by definition).
+	r.POST("/api/v1/auth/login", authH.Login)
+
 	// API v1.
 	v1 := r.Group("/api/v1")
-	v1.Use(middleware.BasicAuth(authCfg))
+	v1.Use(middleware.Authenticate(auth))
 	{
 		// Processes.
 		procs := v1.Group("/processes")
@@ -62,6 +64,7 @@ func NewRouter(mgr *engine.Manager, sched *scheduler.Scheduler, hub *ws.Hub, cfg
 			procs.POST("/:name/restart", processH.Restart)
 			procs.POST("/:name/enable", processH.Enable)
 			procs.POST("/:name/disable", processH.Disable)
+			procs.POST("/:name/autorestart", processH.SetAutorestart)
 			procs.GET("/:name/logs", processH.Logs)
 		}
 

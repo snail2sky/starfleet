@@ -5,6 +5,7 @@ import (
 	"runtime"
 
 	"github.com/gin-gonic/gin"
+	"github.com/snail2sky/starfleet/internal/api/middleware"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/host"
@@ -13,11 +14,15 @@ import (
 )
 
 // SystemHandler handles system information API requests.
-type SystemHandler struct{}
+type SystemHandler struct {
+	auth *middleware.AuthState
+}
 
-// NewSystemHandler creates a new SystemHandler.
-func NewSystemHandler() *SystemHandler {
-	return &SystemHandler{}
+// NewSystemHandler creates a new SystemHandler. The live auth state is
+// reported by Health so unauthenticated clients (the WebUI) know whether
+// to show login — including after a config reload toggles auth.
+func NewSystemHandler(auth *middleware.AuthState) *SystemHandler {
+	return &SystemHandler{auth: auth}
 }
 
 // Overview returns system resource overview.
@@ -64,5 +69,5 @@ func (h *SystemHandler) Overview(c *gin.Context) {
 
 // Health returns a simple health check response.
 func (h *SystemHandler) Health(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "auth": h.auth.Load().Enabled})
 }

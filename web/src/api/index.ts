@@ -5,6 +5,62 @@ const api = axios.create({
   timeout: 10000,
 })
 
+/* ---------- auth ---------- */
+
+const TOKEN_KEY = 'starfleet_token'
+
+export const getToken = (): string | null => localStorage.getItem(TOKEN_KEY)
+export const setToken = (t: string): void => localStorage.setItem(TOKEN_KEY, t)
+export const clearToken = (): void => localStorage.removeItem(TOKEN_KEY)
+
+api.interceptors.request.use((config) => {
+  const t = getToken()
+  if (t) config.headers.Authorization = `Bearer ${t}`
+  return config
+})
+
+api.interceptors.response.use(
+  (resp) => resp,
+  (err) => {
+    if (err.response?.status === 401) {
+      clearToken()
+      if (!window.location.pathname.startsWith('/login')) {
+        window.location.assign('/login')
+      }
+    }
+    return Promise.reject(err)
+  },
+)
+
+// Public (unauthenticated) client for /health.
+const pub = axios.create({ baseURL: '/', timeout: 5000 })
+let authMode: Promise<boolean> | null = null
+
+/**
+ * Whether the server requires login. Resolves false when auth is disabled
+ * or the server is unreachable (a login page would not help then).
+ * The result is cached for the lifetime of the page.
+ */
+export function authRequired(): Promise<boolean> {
+  if (!authMode) {
+    authMode = pub
+      .get<{ status: string; auth: boolean }>('/health')
+      .then((r) => !!r.data?.auth)
+      .catch(() => false)
+  }
+  return authMode
+}
+
+/** Exchange credentials for a token. Throws on wrong credentials. */
+export async function login(username: string, password: string): Promise<void> {
+  const r = await api.post<{ token: string }>('/auth/login', { username, password })
+  setToken(r.data.token)
+}
+
+export function logout(): void {
+  clearToken()
+}
+
 export interface ProcessInfo {
   name: string
   state: string
@@ -94,6 +150,9 @@ export const stopProcess = (name: string) => api.post(`/processes/${name}/stop`)
 export const restartProcess = (name: string) => api.post(`/processes/${name}/restart`)
 export const setProcessAutostart = (name: string, enabled: boolean) =>
   api.post(`/processes/${name}/${enabled ? 'enable' : 'disable'}`)
+export type AutorestartPolicy = 'true' | 'false' | 'unexpected'
+export const setProcessAutorestart = (name: string, value: AutorestartPolicy) =>
+  api.post(`/processes/${name}/autorestart`, { value })
 
 // Log API
 /** Special source selector value: starfleet's own server logs. */

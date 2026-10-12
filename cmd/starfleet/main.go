@@ -7,10 +7,13 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/snail2sky/starfleet/internal/api"
+	"github.com/snail2sky/starfleet/internal/api/middleware"
 	"github.com/snail2sky/starfleet/internal/api/ws"
 	"github.com/snail2sky/starfleet/internal/config"
 	"github.com/snail2sky/starfleet/internal/engine"
@@ -20,6 +23,7 @@ import (
 	"github.com/snail2sky/starfleet/internal/selflog"
 	"github.com/snail2sky/starfleet/internal/tui"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var (
@@ -31,6 +35,9 @@ var (
 // Shared flags (persistent across subcommands).
 var cfgPath string
 var serverURL string // control commands: override server address
+// configFlag is set in init(); referenced from resolveConfigFlag to avoid an
+// initialization cycle through rootCmd.
+var configFlag *pflag.Flag
 
 // serve-only flags.
 var (
@@ -57,6 +64,8 @@ Control a running server:
   starfleet reload                                  # hot-reload config
   starfleet logs [process] [-n 500] [-f]            # server or process logs
   starfleet schedules                               # list scheduled jobs
+  starfleet status --user u --password p            # auth override (or $STARFLEET_USER/$STARFLEET_PASSWORD;
+                                                    #  default: auth.* from the config)
   starfleet run <schedule>                          # trigger a job now
   starfleet version`,
 	// Root without a subcommand = serve (keeps `starfleet -config x` working).
@@ -106,6 +115,7 @@ var versionCmd = &cobra.Command{
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgPath, "config", "c", "starfleet.yml", "path to configuration file")
 	rootCmd.PersistentFlags().StringVar(&serverURL, "server", "", "server URL for control commands, e.g. http://192.168.1.100:8099 (default: from config)")
+	configFlag = rootCmd.PersistentFlags().Lookup("config")
 	rootCmd.Flags().BoolVarP(&daemonMode, "daemon", "d", false, "run as background daemon (logs to file)")
 	rootCmd.Flags().StringVar(&logFile, "log", "", "log file path (default: stdout; auto-set in daemon/TUI mode)")
 
@@ -118,6 +128,27 @@ func init() {
 
 	// Subcommands — without this, `starfleet version` etc. fall through to serve.
 	rootCmd.AddCommand(serveCmd, tuiCmd, validateCmd, statusCmd, versionCmd)
+}
+
+// resolveConfigFlag points cfgPath at the first well-known config location
+// that exists, unless -c/--config was passed explicitly. This lets control
+// commands run from any directory.
+func resolveConfigFlag() error {
+	if configFlag != nil && configFlag.Changed {
+		return nil
+	}
+	candidates := []string{cfgPath}
+	if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates, filepath.Join(home, ".config", "starfleet", "starfleet.yml"))
+	}
+	candidates = append(candidates, "/etc/starfleet/starfleet.yml")
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			cfgPath = p
+			return nil
+		}
+	}
+	return fmt.Errorf("config file not found (tried: %s); pass -c/--config or --server", strings.Join(candidates, ", "))
 }
 
 func main() {
@@ -170,6 +201,9 @@ func setupLogger(path string) *os.File {
 
 // runServe starts the API server and all managed processes.
 func runServe(cmd *cobra.Command, args []string) error {
+	if err := resolveConfigFlag(); err != nil {
+		return err
+	}
 	logPath := resolveLogPath(false)
 	setupLogger(logPath)
 
@@ -208,6 +242,15 @@ func runServe(cmd *cobra.Command, args []string) error {
 	sched.Start()
 	defer sched.Stop()
 
+	// Live auth state shared with the router: reloads Store into it so
+	// server.auth changes take effect without a restart.
+	authState := middleware.NewAuthState(middleware.AuthConfig{
+		Enabled:  cfg.Server.Auth.Enabled,
+		Username: cfg.Server.Auth.Username,
+		Password: cfg.Server.Auth.Password,
+		Secret:   cfg.Server.Auth.Secret,
+	})
+
 	// reloadConfig reloads all config files and applies changes live —
 	// BOTH the process manager and the scheduler (schedules added or
 	// removed in conf.d must take effect without a restart).
@@ -216,6 +259,17 @@ func runServe(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			slog.Error("config reload failed", "error", err)
 			return err
+		}
+		// Hot-apply auth; warn about settings this process cannot change live.
+		authState.Store(middleware.AuthConfig{
+			Enabled:  newCfg.Server.Auth.Enabled,
+			Username: newCfg.Server.Auth.Username,
+			Password: newCfg.Server.Auth.Password,
+			Secret:   newCfg.Server.Auth.Secret,
+		})
+		if changed := restartRequiredFields(cfg, newCfg); len(changed) > 0 {
+			slog.Warn("settings changed that require a restart to take effect",
+				"fields", strings.Join(changed, ","))
 		}
 		bus.Publish(event.Event{Type: event.EventConfigReloaded})
 		if err := mgr.ReloadConfig(newCfg); err != nil {
@@ -253,6 +307,20 @@ func runServe(cmd *cobra.Command, args []string) error {
 		return config.SetProcessAutostart(src, name, enabled)
 	}
 
+	// persistAutorestart writes a changed restart policy back into the
+	// conf fragment that defines the process.
+	persistAutorestart := func(name string, value string) error {
+		fresh, err := config.Load(cfgPath)
+		if err != nil {
+			return err
+		}
+		src, ok := fresh.ProcessSources[name]
+		if !ok {
+			return fmt.Errorf("cannot locate the config file defining %q", name)
+		}
+		return config.SetProcessAutorestart(src, name, value)
+	}
+
 	// persistScheduleEnabled writes a schedule enable/disable toggle back
 	// into the conf fragment that defines the job.
 	persistScheduleEnabled := func(name string, enabled bool) error {
@@ -267,7 +335,9 @@ func runServe(cmd *cobra.Command, args []string) error {
 		return config.SetScheduleEnabled(src, name, enabled)
 	}
 
-	router := api.NewRouter(mgr, sched, hub, cfg, reloadConfig, persistAutostart, persistScheduleEnabled)
+	router := api.NewRouter(mgr, sched, hub, cfg, authState,
+		func() (*config.Config, error) { return config.Load(cfgPath) },
+		reloadConfig, persistAutostart, persistAutorestart, persistScheduleEnabled)
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	go func() {
 		slog.Info("api server starting", "addr", addr)
@@ -307,6 +377,9 @@ func runServe(cmd *cobra.Command, args []string) error {
 // runTUI starts the terminal UI: remote mode when a server is reachable,
 // standalone mode otherwise (never both managing the same processes).
 func runTUI(cmd *cobra.Command, args []string) error {
+	if err := resolveConfigFlag(); err != nil {
+		return err
+	}
 	setupLogger(resolveLogPath(true))
 	slog.Info("starfleet starting", "version", version, "config", cfgPath, "mode", "tui")
 
@@ -320,7 +393,11 @@ func runTUI(cmd *cobra.Command, args []string) error {
 	var mgr tui.Manager
 	if tui.ProbeServer(apiURL) {
 		slog.Info("tui: connecting to running starfleet server", "api", apiURL)
-		mgr = tui.NewRemoteManager(apiURL)
+		var user, pass string
+		if cfg.Server.Auth.Enabled {
+			user, pass = cfg.Server.Auth.Username, cfg.Server.Auth.Password
+		}
+		mgr = tui.NewRemoteManager(apiURL, user, pass)
 	} else {
 		slog.Info("tui: no server found, running in standalone mode")
 		local := engine.NewManager()
@@ -347,8 +424,12 @@ func runTUI(cmd *cobra.Command, args []string) error {
 
 // runValidate loads and validates configuration, printing a summary.
 func runValidate(cmd *cobra.Command, args []string) error {
+	cfgErr := resolveConfigFlag()
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
+		if cfgErr != nil {
+			err = cfgErr
+		}
 		fmt.Fprintf(os.Stderr, "✗ invalid configuration: %v\n", err)
 		return err
 	}
@@ -393,12 +474,16 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	procs := c.List()
-	if len(procs) == 0 {
-		return fmt.Errorf("no response from %s (is starfleet running?)", c.Base())
+	procs, err := c.List()
+	if err != nil {
+		return err
 	}
 
 	fmt.Printf("starfleet at %s\n\n", c.Base())
+	if len(procs) == 0 {
+		fmt.Println("(no processes)")
+		return nil
+	}
 	fmt.Printf("%-24s %-10s %-8s %-14s %-6s\n", "NAME", "STATE", "PID", "UPTIME", "RETRY")
 	for _, p := range procs {
 		uptime := "—"
@@ -424,6 +509,36 @@ func fmtUptime(s string) string {
 	default:
 		return fmt.Sprintf("%dh%dm", int(d.Hours()), int(d.Minutes())%60)
 	}
+}
+
+// restartRequiredFields lists changed settings that the running process
+// cannot apply live (auth is hot-reloaded separately; the listener, web
+// bundle, logging and notifications are fixed at startup). Compared against
+// the startup config, i.e. only fields differing from what is actually live.
+func restartRequiredFields(live, next *config.Config) []string {
+	var out []string
+	if live.Server.Host != next.Server.Host {
+		out = append(out, "server.host")
+	}
+	if live.Server.Port != next.Server.Port {
+		out = append(out, "server.port")
+	}
+	if live.Server.ReadTimeout != next.Server.ReadTimeout {
+		out = append(out, "server.read_timeout")
+	}
+	if live.Server.WriteTimeout != next.Server.WriteTimeout {
+		out = append(out, "server.write_timeout")
+	}
+	if live.Server.Web.Enabled != next.Server.Web.Enabled {
+		out = append(out, "server.web.enabled")
+	}
+	if live.Logging != next.Logging {
+		out = append(out, "logging")
+	}
+	if !reflect.DeepEqual(live.Notifications, next.Notifications) {
+		out = append(out, "notifications")
+	}
+	return out
 }
 
 func modeName(tui, daemon bool) string {

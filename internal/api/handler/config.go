@@ -9,18 +9,27 @@ import (
 
 // ConfigHandler handles configuration API requests.
 type ConfigHandler struct {
-	cfg      *config.Config
+	cfg      *config.Config // fallback snapshot when a fresh load fails
+	loadFn   func() (*config.Config, error)
 	reloadFn func() error
 }
 
-// NewConfigHandler creates a new ConfigHandler.
-func NewConfigHandler(cfg *config.Config, reloadFn func() error) *ConfigHandler {
-	return &ConfigHandler{cfg: cfg, reloadFn: reloadFn}
+// NewConfigHandler creates a new ConfigHandler. loadFn reads the config
+// from disk so GET always reflects the current files (not the snapshot
+// taken at startup); reloadFn triggers a live reload.
+func NewConfigHandler(cfg *config.Config, loadFn func() (*config.Config, error), reloadFn func() error) *ConfigHandler {
+	return &ConfigHandler{cfg: cfg, loadFn: loadFn, reloadFn: reloadFn}
 }
 
 // Get returns the current configuration (sanitized).
 func (h *ConfigHandler) Get(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"data": h.cfg.Sanitize()})
+	cfg := h.cfg
+	if h.loadFn != nil {
+		if fresh, err := h.loadFn(); err == nil {
+			cfg = fresh
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"data": cfg.Sanitize()})
 }
 
 // Reload triggers a configuration reload.

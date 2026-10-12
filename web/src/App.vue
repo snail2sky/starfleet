@@ -1,6 +1,6 @@
 <template>
   <div class="shell">
-    <aside class="sidebar">
+    <aside class="sidebar" v-if="!isLogin">
       <div class="brand">
         <div class="brand__mark">S</div>
         <div class="brand__text">
@@ -45,6 +45,7 @@ import { getHealth } from '@/api'
 const route = useRoute()
 const serverUp = ref(true)
 const version = ref('1.0')
+const isLogin = computed(() => route.name === 'login')
 
 const nav = [
   {
@@ -82,6 +83,7 @@ function isActive(path: string) {
 let timer: ReturnType<typeof setInterval>
 onMounted(() => {
   const ping = async () => {
+    if (isLogin.value) return
     try {
       await getHealth()
       serverUp.value = true

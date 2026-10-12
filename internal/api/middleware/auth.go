@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -14,8 +15,31 @@ import (
 type AuthConfig struct {
 	Enabled  bool
 	Username string
-	Password string // bcrypt hash or plain (for basic auth)
+	Password string // plain text (compared in constant time)
 	Secret   string // JWT secret
+}
+
+// AuthState holds the live auth configuration so reloads take effect
+// without restarting the server. Readers are lock-free.
+type AuthState struct {
+	v atomic.Pointer[AuthConfig]
+}
+
+// NewAuthState creates a state preloaded with cfg.
+func NewAuthState(cfg AuthConfig) *AuthState {
+	s := &AuthState{}
+	s.v.Store(&cfg)
+	return s
+}
+
+// Store replaces the active auth configuration (config reload).
+func (s *AuthState) Store(cfg AuthConfig) {
+	s.v.Store(&cfg)
+}
+
+// Load returns the active auth configuration.
+func (s *AuthState) Load() AuthConfig {
+	return *s.v.Load()
 }
 
 // JWTClaims represents JWT token claims.
@@ -24,48 +48,37 @@ type JWTClaims struct {
 	jwt.RegisteredClaims
 }
 
-// BasicAuth returns a middleware for HTTP Basic Authentication.
-func BasicAuth(cfg AuthConfig) gin.HandlerFunc {
+// Authenticate accepts either HTTP Basic credentials or a Bearer JWT and
+// rejects the request with a JSON 401 otherwise. It reads the live AuthState
+// on every request so config reloads apply immediately. It deliberately does
+// not send WWW-Authenticate so browsers never raise the native credentials
+// dialog over the SPA login flow.
+func Authenticate(state *AuthState) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := state.Load()
 		if !cfg.Enabled {
 			c.Next()
 			return
 		}
-		username, password, ok := c.Request.BasicAuth()
-		if !ok ||
-			subtle.ConstantTimeCompare([]byte(username), []byte(cfg.Username)) != 1 ||
-			subtle.ConstantTimeCompare([]byte(password), []byte(cfg.Password)) != 1 {
-			c.Header("WWW-Authenticate", `Basic realm="Starfleet"`)
-			c.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
-		c.Set("username", username)
-		c.Next()
-	}
-}
-
-// JWTAuth returns a middleware for JWT token authentication.
-func JWTAuth(cfg AuthConfig) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if !cfg.Enabled {
+		if username, password, ok := c.Request.BasicAuth(); ok &&
+			subtle.ConstantTimeCompare([]byte(username), []byte(cfg.Username)) == 1 &&
+			subtle.ConstantTimeCompare([]byte(password), []byte(cfg.Password)) == 1 {
+			c.Set("username", username)
 			c.Next()
 			return
 		}
-		tokenStr := extractToken(c)
-		if tokenStr == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing token"})
-			return
+		if tokenStr := extractToken(c); tokenStr != "" {
+			claims := &JWTClaims{}
+			token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
+				return []byte(cfg.Secret), nil
+			})
+			if err == nil && token.Valid {
+				c.Set("username", claims.Username)
+				c.Next()
+				return
+			}
 		}
-		claims := &JWTClaims{}
-		token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
-			return []byte(cfg.Secret), nil
-		})
-		if err != nil || !token.Valid {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
-			return
-		}
-		c.Set("username", claims.Username)
-		c.Next()
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 	}
 }
 

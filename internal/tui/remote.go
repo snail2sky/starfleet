@@ -20,6 +20,8 @@ type Manager interface {
 	Stop(name string) error
 	Restart(name string) error
 	SetAutostart(name string, enabled bool) error
+	// SetAutorestart changes the restart policy ("true"/"false"/"unexpected").
+	SetAutorestart(name string, value string) error
 	// Logs returns the most recent log lines for a process.
 	Logs(name string, lines int) []engine.LogEntry
 	// ServerLogs returns starfleet's own log lines.
@@ -58,6 +60,11 @@ func (l *LocalManager) Restart(name string) error { return l.mgr.Restart(name) }
 // standalone mode — there is no config file to persist to).
 func (l *LocalManager) SetAutostart(name string, enabled bool) error {
 	return l.mgr.SetAutostart(name, enabled)
+}
+
+// SetAutorestart changes the restart policy (runtime only in standalone mode).
+func (l *LocalManager) SetAutorestart(name string, value string) error {
+	return l.mgr.SetAutorestart(name, value)
 }
 
 // Schedules returns locally-configured jobs.
@@ -110,8 +117,20 @@ type RemoteManager struct {
 }
 
 // NewRemoteManager creates a manager backed by the server API.
-func NewRemoteManager(baseURL string) *RemoteManager {
-	return &RemoteManager{Client: client.New(baseURL)}
+// user/pass are sent as HTTP Basic credentials on every request.
+func NewRemoteManager(baseURL, user, pass string) *RemoteManager {
+	c := client.New(baseURL)
+	c.SetAuth(user, pass)
+	return &RemoteManager{Client: c}
+}
+
+// List implements Manager (the embedded client returns an error instead).
+func (r *RemoteManager) List() []engine.ProcessInfo {
+	procs, err := r.Client.List()
+	if err != nil {
+		return nil
+	}
+	return procs
 }
 
 // Mode implements Manager.

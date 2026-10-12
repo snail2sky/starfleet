@@ -1,8 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { authRequired, getToken } from '@/api'
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    {
+      path: '/login',
+      name: 'login',
+      component: () => import('@/views/Login.vue'),
+    },
     {
       path: '/',
       name: 'dashboard',
@@ -29,6 +35,17 @@ const router = createRouter({
       component: () => import('@/views/Settings.vue'),
     },
   ],
+})
+
+router.beforeEach(async (to) => {
+  const required = await authRequired()
+  if (to.name === 'login') {
+    if (!required) return { name: 'dashboard' }
+    if (getToken()) return { name: 'dashboard' }
+    return true
+  }
+  if (required && !getToken()) return { name: 'login' }
+  return true
 })
 
 export default router

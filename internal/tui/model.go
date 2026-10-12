@@ -327,6 +327,28 @@ func (m Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.showMessage(fmt.Sprintf("✓ %s starts on boot", name))
 				}
 			}
+
+		case key.Matches(msg, key.NewBinding(key.WithKeys("R"))):
+			// Cycle the restart policy: true → unexpected → false → true.
+			name := m.selectedProcess()
+			if name != "" {
+				info, err := m.manager.Get(name)
+				if err != nil {
+					m.showMessage(fmt.Sprintf("✗ %v", err))
+					break
+				}
+				next := map[string]string{
+					"true": "unexpected", "unexpected": "false", "false": "true",
+				}[info.Autorestart]
+				if next == "" {
+					next = "unexpected"
+				}
+				if err := m.manager.SetAutorestart(name, next); err != nil {
+					m.showMessage(fmt.Sprintf("✗ %v", err))
+				} else {
+					m.showMessage(fmt.Sprintf("✓ %s autorestart=%s", name, next))
+				}
+			}
 		}
 
 	case 1: // Schedules
@@ -491,7 +513,7 @@ func (m Model) renderStatusBar() string {
 	var left string
 	switch m.tab {
 	case 0:
-		left = HelpStyle.Render("↑↓ move  ←→ tabs  Enter detail  l logs  0 srv logs  s start  t stop  r restart  e enable/disable  q quit")
+		left = HelpStyle.Render("↑↓ move  ←→ tabs  Enter detail  l logs  0 srv logs  s start  t stop  r restart  e boot  R autorestart  q quit")
 	case 1:
 		left = HelpStyle.Render("↑↓ move  r run  e enable/disable  h history  ←→ tabs  q quit")
 	default:

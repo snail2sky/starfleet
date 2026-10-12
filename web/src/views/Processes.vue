@@ -66,9 +66,17 @@
             <span class="tnum">{{ row.retry_count }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="Autorestart" width="120">
+        <el-table-column label="Autorestart" width="130">
           <template #default="{ row }">
-            <code class="cell-cmd">{{ row.autorestart }}</code>
+            <button
+              class="policy"
+              :class="policyClass(row.autorestart)"
+              :title="policyTitle(row.autorestart)"
+              :disabled="toggling === row.name"
+              @click.stop="cycleAutorestart(row)"
+            >
+              {{ row.autorestart }}
+            </button>
           </template>
         </el-table-column>
         <el-table-column label="Command" min-width="220" show-overflow-tooltip>
@@ -123,7 +131,7 @@ import { storeToRefs } from 'pinia'
 import { useProcessStore } from '@/stores/process'
 import { ElMessage } from 'element-plus'
 import ProcessDetail from '@/components/ProcessDetail.vue'
-import { setProcessAutostart, type ProcessInfo } from '@/api'
+import { setProcessAutostart, setProcessAutorestart, type ProcessInfo, type AutorestartPolicy } from '@/api'
 
 const processStore = useProcessStore()
 const { processes, loading } = storeToRefs(processStore)
@@ -192,6 +200,38 @@ async function toggleAutostart(row: ProcessInfo) {
   } catch (e: any) {
     const warning = e?.response?.data?.warning
     ElMessage.error(warning || `Failed to change autostart for ${row.name}`)
+  } finally {
+    toggling.value = ''
+  }
+}
+
+/** Restart policy cycle: true → unexpected → false → true (same as TUI `R`). */
+const POLICY_CYCLE: Record<string, AutorestartPolicy> = {
+  true: 'unexpected',
+  unexpected: 'false',
+  false: 'true',
+}
+function policyClass(v: string) {
+  return v === 'true' ? 'policy--always' : v === 'unexpected' ? 'policy--unexpected' : 'policy--never'
+}
+function policyTitle(v: string) {
+  const desc: Record<string, string> = {
+    true: 'always restart',
+    unexpected: 'restart on unexpected exit only',
+    false: 'never restart',
+  }
+  return `${desc[v] ?? v} — click to cycle`
+}
+async function cycleAutorestart(row: ProcessInfo) {
+  const next = POLICY_CYCLE[row.autorestart] ?? 'unexpected'
+  toggling.value = row.name
+  try {
+    await setProcessAutorestart(row.name, next)
+    await processStore.fetchProcesses()
+    ElMessage.success(`${row.name} autorestart = ${next}`)
+  } catch (e: any) {
+    const warning = e?.response?.data?.warning
+    ElMessage.error(warning || `Failed to change autorestart for ${row.name}`)
   } finally {
     toggling.value = ''
   }
@@ -320,5 +360,36 @@ onMounted(() => processStore.fetchProcesses())
   background: var(--good-soft);
   border-color: rgba(12, 163, 12, 0.35);
 }
+
+/* autorestart policy cycle button */
+.policy {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: ui-monospace, monospace;
+  letter-spacing: 0.03em;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.policy:disabled { opacity: 0.5; cursor: wait; }
+.policy--always {
+  color: var(--good);
+  background: var(--good-soft);
+  border-color: rgba(12, 163, 12, 0.35);
+}
+.policy--unexpected {
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-color: rgba(250, 178, 25, 0.35);
+}
+.policy--never { color: var(--ink-3); }
+
 .tnum { font-variant-numeric: tabular-nums; color: var(--ink-2); }
 </style>

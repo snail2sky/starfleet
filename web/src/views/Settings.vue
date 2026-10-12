@@ -6,6 +6,7 @@
         <p class="page-sub">Effective configuration (secrets masked) and runtime system info</p>
       </div>
       <div class="page-head__actions">
+        <button v-if="canLogout" class="btn" @click="handleLogout">Sign out</button>
         <button class="btn" @click="fetchConfig">Reload view</button>
         <button class="btn btn--primary" @click="handleReload">Hot-reload config</button>
       </div>
@@ -57,11 +58,20 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getConfig, reloadConfig, getSystemOverview, type SystemOverview } from '@/api'
+import {
+  getConfig,
+  reloadConfig,
+  getSystemOverview,
+  authRequired,
+  logout,
+  getToken,
+  type SystemOverview,
+} from '@/api'
 
 const configText = ref('Loading…')
 const rawConfig = ref<any>(null)
 const overview = ref<SystemOverview | null>(null)
+const canLogout = ref(false)
 
 const platformText = computed(() => {
   const h = overview.value?.host
@@ -105,8 +115,14 @@ async function handleReload() {
   }
 }
 
+function handleLogout() {
+  logout()
+  window.location.assign('/login')
+}
+
 onMounted(async () => {
   fetchConfig()
+  canLogout.value = (await authRequired()) && !!getToken()
   try {
     const { data } = await getSystemOverview()
     overview.value = data.data

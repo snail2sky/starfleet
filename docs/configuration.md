@@ -67,6 +67,7 @@ includes:
 - 新增进程 → 自动启动（autostart=true 时）
 - 删除进程 → 优雅停止
 - 修改进程定义 → 重启该进程（未变更的进程不受影响）
+- 修改 `server.auth` → 认证立即生效（无需重启）
 - 也可手动触发：`starfleet reload`、`kill -HUP <pid>`、`POST /api/v1/config/reload`
 
 ---
@@ -98,6 +99,21 @@ server:
     secret: "至少32字符的随机串"
 ```
 
+启用 `auth.enabled` 后：
+
+- **WebUI**：打开页面会跳转到登录页，凭证通过
+  `POST /api/v1/auth/login` 换取 24h JWT，后续请求携带
+  `Authorization: Bearer <token>`；`GET /health`（无认证）会返回
+  `{"auth": true/false}`，前端据此决定是否需要登录。
+- **API**：接受 Basic Auth 或 Bearer JWT 两种方式（`/health` 与登录端点除外）。
+- **CLI/TUI**：自动读取配置中的 `auth.username`/`auth.password`；
+  也可以用 `--user` / `--password` 参数或 `STARFLEET_USER` /
+  `STARFLEET_PASSWORD` 环境变量覆盖（优先级：参数 > 环境变量 > 配置）。
+- **热加载**：`auth.*` 修改后 `starfleet reload`（或最长 5s 的配置 watcher）
+  **立即生效**；`server.host`/`server.port`/`server.web.enabled`、`logging`、
+  `notifications` 的变更无法热应用，reload 时会打 `WARN ... require a
+  restart` 日志，需要重启服务。
+
 ---
 
 ## 3. processes — 进程定义
@@ -112,7 +128,7 @@ server:
 | `directory` | string | — | 工作目录（chdir 后执行） |
 | `user` | string | 当前用户 | 以哪个用户运行（等价 supervisord 的 `user=`）。切换到**其他**用户要求 starfleet 以 root 运行；与 starfleet 同用户时无特权要求 |
 | `autostart` | bool | `true` | starfleet 启动时是否自动拉起 |
-| `autorestart` | string | `unexpected` | `true`=总是重启 / `false`=不重启 / `unexpected`=非预期退出码才重启 |
+| `autorestart` | string | `unexpected` | `true`=总是重启 / `false`=不重启 / `unexpected`=非预期退出码才重启。可在 WebUI 点击单元格、TUI 按 `R` 循环修改（即时生效并写回配置文件） |
 | `startsecs` | int | `1` | 启动后运行满该秒数才算成功 |
 | `startretries` | int | `3` | **连续启动失败**（进程未运行满 startsecs 就退出）达到该次数进入 FATAL。成功启动后再崩溃的进程按 `autorestart` 无限重试（退避递增，上限 backoff_limit）— 与 supervisord 语义一致，网络抖动型服务不会被放弃 |
 | `stopsignal` | string | `SIGTERM` | 停止时发送的信号（SIGTERM/SIGINT/SIGQUIT/SIGHUP/SIGKILL/SIGUSR1/SIGUSR2） |

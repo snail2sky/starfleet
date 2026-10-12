@@ -3,6 +3,7 @@
 package client
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,8 +18,9 @@ import (
 
 // Client talks to a starfleet server's REST API.
 type Client struct {
-	base string
-	http *http.Client
+	base       string
+	user, pass string
+	http       *http.Client
 }
 
 // New creates a client for baseURL (e.g. http://127.0.0.1:8080).
@@ -27,6 +29,11 @@ func New(baseURL string) *Client {
 		base: strings.TrimRight(baseURL, "/"),
 		http: &http.Client{Timeout: 15 * time.Second},
 	}
+}
+
+// SetAuth attaches HTTP Basic credentials to every request.
+func (c *Client) SetAuth(user, pass string) {
+	c.user, c.pass = user, pass
 }
 
 // Probe checks whether a starfleet server is reachable.
@@ -46,14 +53,14 @@ func (c *Client) Base() string { return c.base }
 /* ---------- processes ---------- */
 
 // List returns all managed processes.
-func (c *Client) List() []engine.ProcessInfo {
+func (c *Client) List() ([]engine.ProcessInfo, error) {
 	var out struct {
 		Data []engine.ProcessInfo `json:"data"`
 	}
 	if err := c.get("/api/v1/processes", &out); err != nil {
-		return nil
+		return nil, err
 	}
-	return out.Data
+	return out.Data, nil
 }
 
 // Get returns one process's runtime info.
@@ -100,6 +107,12 @@ func (c *Client) SetAutostart(name string, enabled bool) error {
 		action = "enable"
 	}
 	return c.post("/api/v1/processes/" + name + "/" + action)
+}
+
+// SetAutorestart changes the restart policy ("true", "false", "unexpected";
+// persisted server-side).
+func (c *Client) SetAutorestart(name string, value string) error {
+	return c.postJSON("/api/v1/processes/"+name+"/autorestart", map[string]string{"value": value})
 }
 
 /* ---------- logs ---------- */
@@ -176,7 +189,7 @@ func (c *Client) Reload() error {
 /* ---------- transport ---------- */
 
 func (c *Client) get(path string, v interface{}) error {
-	resp, err := c.http.Get(c.base + path)
+	resp, err := c.do(http.MethodGet, path, nil)
 	if err != nil {
 		return fmt.Errorf("api request %s: %w", path, err)
 	}
@@ -184,16 +197,45 @@ func (c *Client) get(path string, v interface{}) error {
 }
 
 func (c *Client) post(path string) error {
-	resp, err := c.http.Post(c.base+path, "application/json", nil)
+	resp, err := c.do(http.MethodPost, path, nil)
 	if err != nil {
 		return fmt.Errorf("api request %s: %w", path, err)
 	}
 	return decode(resp, nil)
 }
 
+func (c *Client) postJSON(path string, payload interface{}) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	resp, err := c.do(http.MethodPost, path, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("api request %s: %w", path, err)
+	}
+	return decode(resp, nil)
+}
+
+func (c *Client) do(method, path string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequest(method, c.base+path, body)
+	if err != nil {
+		return nil, err
+	}
+	if c.user != "" || c.pass != "" {
+		req.SetBasicAuth(c.user, c.pass)
+	}
+	if method == http.MethodPost {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	return c.http.Do(req)
+}
+
 func decode(resp *http.Response, v interface{}) error {
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode == http.StatusUnauthorized {
+		return fmt.Errorf("authentication failed (HTTP 401): set auth.username/auth.password in the config, or pass --user/--password")
+	}
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}

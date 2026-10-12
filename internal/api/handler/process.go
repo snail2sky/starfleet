@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/snail2sky/starfleet/internal/engine"
@@ -14,6 +15,8 @@ type ProcessHandler struct {
 	// persistAutostart writes the new autostart value back to the config
 	// file that defines the process. Optional (nil = runtime only).
 	persistAutostart func(name string, enabled bool) error
+	// persistAutorestart does the same for the restart policy.
+	persistAutorestart func(name string, value string) error
 }
 
 // NewProcessHandler creates a new ProcessHandler.
@@ -24,6 +27,12 @@ func NewProcessHandler(mgr *engine.Manager) *ProcessHandler {
 // SetAutostartPersister injects the config-file persistence hook.
 func (h *ProcessHandler) SetAutostartPersister(fn func(name string, enabled bool) error) {
 	h.persistAutostart = fn
+}
+
+// SetAutorestartPersister injects the config-file persistence hook for
+// the restart policy.
+func (h *ProcessHandler) SetAutorestartPersister(fn func(name string, value string) error) {
+	h.persistAutorestart = fn
 }
 
 // List returns all processes.
@@ -110,6 +119,37 @@ func (h *ProcessHandler) Enable(c *gin.Context) { h.setAutostart(c, true) }
 
 // Disable turns off boot-start for a process (stays running until stopped).
 func (h *ProcessHandler) Disable(c *gin.Context) { h.setAutostart(c, false) }
+
+// SetAutorestart changes the restart policy (POST {"value": "true" |
+// "false" | "unexpected"}) and persists it to the config file.
+func (h *ProcessHandler) SetAutorestart(c *gin.Context) {
+	name := c.Param("name")
+	var req struct {
+		Value string `json:"value"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "expected JSON {\"value\": \"true|false|unexpected\"}"})
+		return
+	}
+	if err := h.manager.SetAutorestart(name, req.Value); err != nil {
+		status := http.StatusNotFound
+		if strings.HasPrefix(err.Error(), "autorestart must") {
+			status = http.StatusBadRequest
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	if h.persistAutorestart != nil {
+		if err := h.persistAutorestart(name, req.Value); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   err.Error(),
+				"warning": "changed in memory but not persisted to config file",
+			})
+			return
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"message": name + " autorestart=" + req.Value, "autorestart": req.Value})
+}
 
 // parseLines extracts the ?lines= query parameter with a default and cap.
 func parseLines(c *gin.Context, def, max int) int {
