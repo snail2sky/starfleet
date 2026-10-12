@@ -253,7 +253,21 @@ func runServe(cmd *cobra.Command, args []string) error {
 		return config.SetProcessAutostart(src, name, enabled)
 	}
 
-	router := api.NewRouter(mgr, sched, hub, cfg, reloadConfig, persistAutostart)
+	// persistScheduleEnabled writes a schedule enable/disable toggle back
+	// into the conf fragment that defines the job.
+	persistScheduleEnabled := func(name string, enabled bool) error {
+		fresh, err := config.Load(cfgPath)
+		if err != nil {
+			return err
+		}
+		src, ok := fresh.ScheduleSources[name]
+		if !ok {
+			return fmt.Errorf("cannot locate the config file defining schedule %q", name)
+		}
+		return config.SetScheduleEnabled(src, name, enabled)
+	}
+
+	router := api.NewRouter(mgr, sched, hub, cfg, reloadConfig, persistAutostart, persistScheduleEnabled)
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	go func() {
 		slog.Info("api server starting", "addr", addr)

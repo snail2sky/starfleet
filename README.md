@@ -133,6 +133,8 @@ notifications:
 | GET | `/api/v1/schedules/:name` | Get schedule details |
 | POST | `/api/v1/schedules/:name/run` | Trigger execution |
 | GET | `/api/v1/schedules/:name/history` | Execution history |
+| POST | `/api/v1/schedules/:name/enable` | Schedule the job (persisted to config file) |
+| POST | `/api/v1/schedules/:name/disable` | Pause the job (definition kept) |
 
 ### System
 
@@ -165,7 +167,8 @@ between them costs nothing.
 | Start / Stop / Restart | row buttons | `s` / `t` / `r` |
 | Toggle boot start | Boot column switch | `e` |
 | Trigger a schedule | Run now | `r` in Schedules tab |
-| Execution history | History button | — |
+| Enable/disable schedule | Enabled switch | `e` in Schedules tab |
+| Execution history | History button | `h` in Schedules tab |
 | System overview | Overview page | — |
 | Config editor / status | Settings page | — |
 

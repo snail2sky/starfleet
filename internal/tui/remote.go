@@ -26,6 +26,8 @@ type Manager interface {
 	ServerLogs(lines int) []engine.LogEntry
 	Schedules() []scheduler.JobInfo
 	RunSchedule(name string) error
+	SetScheduleEnabled(name string, enabled bool) error
+	ScheduleHistory(name string, limit int) []scheduler.HistoryEntry
 	Mode() string // "local" or "remote"
 }
 
@@ -74,6 +76,22 @@ func (l *LocalManager) RunSchedule(name string) error {
 	return l.sched.Run(name)
 }
 
+// SetScheduleEnabled toggles a job (runtime only in standalone mode).
+func (l *LocalManager) SetScheduleEnabled(name string, enabled bool) error {
+	if l.sched == nil {
+		return fmt.Errorf("scheduler not available in standalone TUI")
+	}
+	return l.sched.SetEnabled(name, enabled)
+}
+
+// ScheduleHistory returns local execution history for a job.
+func (l *LocalManager) ScheduleHistory(name string, limit int) []scheduler.HistoryEntry {
+	if l.sched == nil {
+		return nil
+	}
+	return l.sched.History(name, limit)
+}
+
 // Logs reads captured lines from the in-process log collector.
 func (l *LocalManager) Logs(name string, lines int) []engine.LogEntry {
 	return engine.DefaultCollector().LastN(name, lines)
@@ -116,6 +134,20 @@ func (r *RemoteManager) Schedules() []scheduler.JobInfo {
 // RunSchedule triggers a job on the server.
 func (r *RemoteManager) RunSchedule(name string) error {
 	return r.Client.RunSchedule(name)
+}
+
+// SetScheduleEnabled toggles a job on the server (persisted there).
+func (r *RemoteManager) SetScheduleEnabled(name string, enabled bool) error {
+	return r.Client.SetScheduleEnabled(name, enabled)
+}
+
+// ScheduleHistory fetches execution history from the server.
+func (r *RemoteManager) ScheduleHistory(name string, limit int) []scheduler.HistoryEntry {
+	entries, err := r.Client.ScheduleHistory(name, limit)
+	if err != nil {
+		return nil
+	}
+	return entries
 }
 
 // ProbeServer checks whether a starfleet server is reachable.

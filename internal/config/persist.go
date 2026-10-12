@@ -12,6 +12,17 @@ import (
 // yaml.Node round-trip. This is what the API's enable/disable endpoints
 // use to persist the change.
 func SetProcessAutostart(path, name string, enabled bool) error {
+	return setNestedBool(path, "processes", name, "autostart", enabled)
+}
+
+// SetScheduleEnabled rewrites enabled for one schedule, same guarantees.
+func SetScheduleEnabled(path, name string, enabled bool) error {
+	return setNestedBool(path, "schedules", name, "enabled", enabled)
+}
+
+// setNestedBool rewrites <section>.<name>.<key> = <bool> in a YAML file,
+// preserving everything else (including comments).
+func setNestedBool(path, section, name, key string, value bool) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", path, err)
@@ -25,15 +36,15 @@ func SetProcessAutostart(path, name string, enabled bool) error {
 	}
 	root := doc.Content[0]
 
-	procs := mapValue(root, "processes")
-	if procs == nil {
-		return fmt.Errorf("%s has no processes section", path)
+	sec := mapValue(root, section)
+	if sec == nil {
+		return fmt.Errorf("%s has no %s section", path, section)
 	}
-	proc := mapValue(procs, name)
-	if proc == nil {
-		return fmt.Errorf("process %q not defined in %s", name, path)
+	entry := mapValue(sec, name)
+	if entry == nil {
+		return fmt.Errorf("%q not defined under %s in %s", name, section, path)
 	}
-	if err := setMapBool(proc, "autostart", enabled); err != nil {
+	if err := setMapBool(entry, key, value); err != nil {
 		return fmt.Errorf("update %s: %w", path, err)
 	}
 

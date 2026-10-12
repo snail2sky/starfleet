@@ -145,6 +145,15 @@ func (c *Client) RunSchedule(name string) error {
 	return c.post("/api/v1/schedules/" + name + "/run")
 }
 
+// SetScheduleEnabled toggles a schedule on/off (persisted server-side).
+func (c *Client) SetScheduleEnabled(name string, enabled bool) error {
+	action := "disable"
+	if enabled {
+		action = "enable"
+	}
+	return c.post("/api/v1/schedules/" + name + "/" + action)
+}
+
 // ScheduleHistory returns execution history for a job.
 func (c *Client) ScheduleHistory(name string, limit int) ([]scheduler.HistoryEntry, error) {
 	var out struct {

@@ -121,6 +121,8 @@ export const getHealth = () => api.get('/system/health')
 export const getSchedules = () => api.get<{ data: ScheduleInfo[] }>('/schedules')
 export const getSchedule = (name: string) => api.get<{ data: ScheduleInfo }>(`/schedules/${name}`)
 export const runSchedule = (name: string) => api.post(`/schedules/${name}/run`)
+export const setScheduleEnabled = (name: string, enabled: boolean) =>
+  api.post(`/schedules/${name}/${enabled ? 'enable' : 'disable'}`)
 export const getScheduleHistory = (name: string, limit = 50) =>
   api.get<{ data: HistoryEntry[] }>(`/schedules/${name}/history?limit=${limit}`)
 

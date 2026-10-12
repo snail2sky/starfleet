@@ -16,8 +16,9 @@ type Router struct {
 }
 
 // NewRouter creates and configures the API router.
-// persistAutostart writes enable/disable back to config files (optional).
-func NewRouter(mgr *engine.Manager, sched *scheduler.Scheduler, hub *ws.Hub, cfg *config.Config, reloadFn func() error, persistAutostart func(name string, enabled bool) error) *Router {
+// persistAutostart writes process enable/disable back to config files;
+// persistSchedule does the same for scheduled jobs (both optional).
+func NewRouter(mgr *engine.Manager, sched *scheduler.Scheduler, hub *ws.Hub, cfg *config.Config, reloadFn func() error, persistAutostart func(name string, enabled bool) error, persistSchedule func(name string, enabled bool) error) *Router {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -40,6 +41,9 @@ func NewRouter(mgr *engine.Manager, sched *scheduler.Scheduler, hub *ws.Hub, cfg
 	systemH := handler.NewSystemHandler()
 	configH := handler.NewConfigHandler(cfg, reloadFn)
 	scheduleH := handler.NewScheduleHandler(sched)
+	if persistSchedule != nil {
+		scheduleH.SetEnabledPersister(persistSchedule)
+	}
 
 	// Health check (no auth required).
 	r.GET("/health", systemH.Health)
@@ -74,6 +78,8 @@ func NewRouter(mgr *engine.Manager, sched *scheduler.Scheduler, hub *ws.Hub, cfg
 			schedules.GET("/:name", scheduleH.Get)
 			schedules.POST("/:name/run", scheduleH.Run)
 			schedules.GET("/:name/history", scheduleH.History)
+			schedules.POST("/:name/enable", scheduleH.Enable)
+			schedules.POST("/:name/disable", scheduleH.Disable)
 		}
 
 		// System.

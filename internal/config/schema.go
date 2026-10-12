@@ -29,6 +29,8 @@ type Config struct {
 	// ProcessSources maps process name → config file that defines it
 	// (last writer wins), used by enable/disable persistence. Runtime only.
 	ProcessSources map[string]string `yaml:"-" json:"-"`
+	// ScheduleSources does the same for scheduled jobs.
+	ScheduleSources map[string]string `yaml:"-" json:"-"`
 }
 
 // ServerConfig is the HTTP server configuration.

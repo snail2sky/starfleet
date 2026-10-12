@@ -38,6 +38,8 @@ func NewScheduler(bus *event.Bus) *Scheduler {
 }
 
 // LoadFromConfig loads schedule definitions from configuration.
+// All schedules are registered (so they can be listed/toggled); only
+// enabled ones get a cron entry.
 func (s *Scheduler) LoadFromConfig(cfg *config.Config) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -45,17 +47,49 @@ func (s *Scheduler) LoadFromConfig(cfg *config.Config) error {
 		if _, exists := s.jobs[name]; exists {
 			continue // already loaded
 		}
-		if !scfg.Enabled {
-			continue
-		}
 		job := NewJob(name, scfg, s.history, s.bus)
-		entryID, err := s.cron.AddJob(scfg.Cron, job)
+		if scfg.Enabled {
+			entryID, err := s.cron.AddJob(scfg.Cron, job)
+			if err != nil {
+				return fmt.Errorf("schedule %q: %w", name, err)
+			}
+			job.entryID = entryID
+		}
+		s.jobs[name] = job
+		if scfg.Enabled {
+			s.logger.Info("scheduled task added", "name", name, "cron", scfg.Cron)
+		}
+	}
+	return nil
+}
+
+// SetEnabled turns a schedule on or off. Disabling removes its cron
+// entry but keeps the definition (so it can be re-enabled later, and so
+// the UI can show it as OFF).
+func (s *Scheduler) SetEnabled(name string, enabled bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	job, ok := s.jobs[name]
+	if !ok {
+		return fmt.Errorf("schedule %q not found", name)
+	}
+	if job.Config.Enabled == enabled {
+		return nil
+	}
+	job.Config.Enabled = enabled
+	if enabled {
+		entryID, err := s.cron.AddJob(job.Config.Cron, job)
 		if err != nil {
 			return fmt.Errorf("schedule %q: %w", name, err)
 		}
 		job.entryID = entryID
-		s.jobs[name] = job
-		s.logger.Info("scheduled task added", "name", name, "cron", scfg.Cron)
+		s.logger.Info("schedule enabled", "name", name, "cron", job.Config.Cron)
+	} else {
+		if job.entryID != 0 {
+			s.cron.Remove(job.entryID)
+			job.entryID = 0
+		}
+		s.logger.Info("schedule disabled", "name", name)
 	}
 	return nil
 }

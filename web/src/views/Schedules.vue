@@ -27,9 +27,16 @@
         </el-table-column>
         <el-table-column label="Enabled" width="100">
           <template #default="{ row }">
-            <span class="badge" :class="row.enabled ? 'badge--running' : 'badge--idle'">
+            <button
+              class="toggle"
+              :class="{ 'toggle--on': row.enabled }"
+              :title="row.enabled ? 'Scheduled — click to pause' : 'Paused — click to schedule'"
+              :disabled="toggling === row.name"
+              @click="toggleEnabled(row)"
+            >
+              <span class="toggle__dot"></span>
               {{ row.enabled ? 'ON' : 'OFF' }}
-            </span>
+            </button>
           </template>
         </el-table-column>
         <el-table-column label="Next run" width="170">
@@ -110,6 +117,7 @@ import { ElMessage } from 'element-plus'
 import {
   getSchedules,
   runSchedule,
+  setScheduleEnabled,
   getScheduleHistory,
   type ScheduleInfo,
   type HistoryEntry,
@@ -120,6 +128,7 @@ const history = ref<HistoryEntry[]>([])
 const historyJob = ref('')
 const historyVisible = ref(false)
 const loading = ref(false)
+const toggling = ref('')
 
 // Auto-refresh keeps Next-run accurate and self-heals an empty table.
 let refreshTimer: ReturnType<typeof setInterval> | null = null
@@ -146,6 +155,24 @@ async function runJob(name: string) {
     await fetchSchedules()
   } catch {
     ElMessage.error(`Failed to trigger "${name}"`)
+  }
+}
+
+/** Enable/disable a schedule; the server persists it into the config file. */
+async function toggleEnabled(row: ScheduleInfo) {
+  toggling.value = row.name
+  try {
+    await setScheduleEnabled(row.name, !row.enabled)
+    await fetchSchedules()
+    ElMessage.success(
+      row.enabled ? `"${row.name}" paused` : `"${row.name}" scheduled`,
+    )
+  } catch (e: any) {
+    ElMessage.error(
+      e?.response?.data?.warning || `Failed to change "${row.name}"`,
+    )
+  } finally {
+    toggling.value = ''
   }
 }
 
@@ -224,5 +251,35 @@ onUnmounted(() => {
   font-size: 12.5px;
   color: var(--ink-3);
   margin-bottom: 12px;
+}
+
+/* enabled toggle (mirrors the Processes page Boot switch) */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 24px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.toggle:disabled { opacity: 0.5; cursor: wait; }
+.toggle__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.toggle--on {
+  color: var(--good);
+  background: var(--good-soft);
+  border-color: rgba(12, 163, 12, 0.35);
 }
 </style>

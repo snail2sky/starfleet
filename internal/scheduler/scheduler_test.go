@@ -143,3 +143,74 @@ func mustJob(t *testing.T, s *Scheduler, name string) JobInfo {
 	}
 	return *info
 }
+
+func TestSetEnabledTogglesCronEntry(t *testing.T) {
+	bus := event.NewBus(4)
+	defer bus.Close()
+	s := NewScheduler(bus)
+
+	cfg := config.DefaultConfig()
+	cfg.Schedules["job"] = config.ScheduleConfig{
+		Cron: "@every 1h", Command: "echo j", Type: "exec", Enabled: true,
+	}
+	if err := s.LoadFromConfig(cfg); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	s.Start()
+	defer s.Stop()
+
+	// Disable: stays listed (for re-enabling) but loses its cron entry.
+	if err := s.SetEnabled("job", false); err != nil {
+		t.Fatalf("disable: %v", err)
+	}
+	if mustJob(t, s, "job").Enabled {
+		t.Error("job should report disabled")
+	}
+	if len(s.jobs) != 1 {
+		t.Errorf("disabled job must stay registered, jobs=%d", len(s.jobs))
+	}
+	if entries := s.cron.Entries(); len(entries) != 0 {
+		t.Errorf("cron entry should be removed, got %d", len(entries))
+	}
+
+	// Re-enable: cron entry returns.
+	if err := s.SetEnabled("job", true); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+	if !mustJob(t, s, "job").Enabled {
+		t.Error("job should report enabled")
+	}
+	if entries := s.cron.Entries(); len(entries) != 1 {
+		t.Errorf("cron entry should exist, got %d", len(entries))
+	}
+
+	if err := s.SetEnabled("nope", true); err == nil {
+		t.Error("expected error for unknown schedule")
+	}
+}
+
+func TestDisabledSchedulesAreListedButNotRun(t *testing.T) {
+	bus := event.NewBus(4)
+	defer bus.Close()
+	s := NewScheduler(bus)
+
+	cfg := config.DefaultConfig()
+	cfg.Schedules["paused"] = config.ScheduleConfig{
+		Cron: "@every 1s", Command: "echo p", Type: "exec", Enabled: false,
+	}
+	if err := s.LoadFromConfig(cfg); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	s.Start()
+	defer s.Stop()
+
+	time.Sleep(300 * time.Millisecond)
+	// It must be visible (so the UI can re-enable it) …
+	if _, err := s.Get("paused"); err != nil {
+		t.Errorf("disabled schedule must still be listed: %v", err)
+	}
+	// … but never executed.
+	if h := s.History("paused", 10); len(h) != 0 {
+		t.Errorf("disabled schedule must not run, got %d runs", len(h))
+	}
+}

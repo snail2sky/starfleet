@@ -138,3 +138,39 @@ func TestWebConfigDefaultEnabled(t *testing.T) {
 		t.Error("web.enabled=false was not honored")
 	}
 }
+
+func TestSetScheduleEnabled(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "jobs.yml")
+	original := `schedules:
+  report:
+    cron: "*/5 * * * *"
+    command: /home/orangepi/bin/report.sh   # every five minutes
+    enabled: true
+`
+	if err := os.WriteFile(path, []byte(original), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetScheduleEnabled(path, "report", false); err != nil {
+		t.Fatalf("disable: %v", err)
+	}
+	got, _ := os.ReadFile(path)
+	s := string(got)
+	if !strings.Contains(s, "enabled: false") {
+		t.Errorf("enabled not flipped:\n%s", s)
+	}
+	if !strings.Contains(s, "# every five minutes") {
+		t.Errorf("comment lost:\n%s", s)
+	}
+	if !strings.Contains(s, "cron: \"*/5 * * * *\"") {
+		t.Errorf("cron lost:\n%s", s)
+	}
+	// Re-enable.
+	if err := SetScheduleEnabled(path, "report", true); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+	s2, _ := os.ReadFile(path)
+	if !strings.Contains(string(s2), "enabled: true") {
+		t.Errorf("re-enable failed:\n%s", s2)
+	}
+}

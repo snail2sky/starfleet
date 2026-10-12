@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/snail2sky/starfleet/internal/engine"
+	"github.com/snail2sky/starfleet/internal/scheduler"
 )
 
 // View modes.
@@ -21,6 +22,7 @@ const (
 	ViewList ViewMode = iota
 	ViewDetail
 	ViewLogs
+	ViewSchedHistory
 )
 
 // Model is the main TUI model.
@@ -50,7 +52,9 @@ type Model struct {
 	logLoaded  bool // true once first fetch completed for current process
 
 	// Schedule table
-	schedTable table.Model
+	schedTable    table.Model
+	schedHistName string
+	schedHist     []scheduler.HistoryEntry
 
 	// Common
 	spinner  spinner.Model
@@ -149,6 +153,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.viewMode == ViewLogs {
 			m.refreshLogs()
 		}
+		if m.viewMode == ViewSchedHistory && m.schedHistName != "" {
+			m.schedHist = m.manager.ScheduleHistory(m.schedHistName, 50)
+		}
 		if m.msgTimer > 0 {
 			m.msgTimer--
 			if m.msgTimer == 0 {
@@ -236,6 +243,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleDetailKey(msg)
 	case ViewLogs:
 		return m.handleLogKey(msg)
+	case ViewSchedHistory:
+		switch {
+		case key.Matches(msg, key.NewBinding(key.WithKeys("esc", "backspace", "q"))):
+			m.viewMode = ViewList
+		}
+		return m, nil
 	}
 	return m, nil
 }
@@ -331,6 +344,29 @@ func (m Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.showMessage(fmt.Sprintf("✓ triggered %s", row[0]))
 				}
 			}
+
+		case key.Matches(msg, key.NewBinding(key.WithKeys("e"))):
+			// Toggle enabled state of the selected job.
+			row := m.schedTable.SelectedRow()
+			if len(row) > 0 {
+				name := row[0]
+				enabled := row[3] == "true"
+				if err := m.manager.SetScheduleEnabled(name, !enabled); err != nil {
+					m.showMessage(fmt.Sprintf("✗ %v", err))
+				} else if enabled {
+					m.showMessage(fmt.Sprintf("✓ %s disabled", name))
+				} else {
+					m.showMessage(fmt.Sprintf("✓ %s enabled", name))
+				}
+			}
+
+		case key.Matches(msg, key.NewBinding(key.WithKeys("h"))):
+			row := m.schedTable.SelectedRow()
+			if len(row) > 0 {
+				m.schedHistName = row[0]
+				m.schedHist = m.manager.ScheduleHistory(row[0], 50)
+				m.viewMode = ViewSchedHistory
+			}
 		}
 	}
 	return m, nil
@@ -395,6 +431,8 @@ func (m Model) View() string {
 		return m.viewDetail()
 	case ViewLogs:
 		return m.viewLogs()
+	case ViewSchedHistory:
+		return m.viewSchedHistory()
 	}
 
 	// List view.
@@ -455,7 +493,7 @@ func (m Model) renderStatusBar() string {
 	case 0:
 		left = HelpStyle.Render("↑↓ move  ←→ tabs  Enter detail  l logs  0 srv logs  s start  t stop  r restart  e enable/disable  q quit")
 	case 1:
-		left = HelpStyle.Render("↑↓ move  r run now  ←→ tabs  q quit")
+		left = HelpStyle.Render("↑↓ move  r run  e enable/disable  h history  ←→ tabs  q quit")
 	default:
 		left = HelpStyle.Render("q quit")
 	}
@@ -648,6 +686,52 @@ func (m *Model) refreshLogs() {
 	m.logLoaded = true
 }
 
+// viewSchedHistory renders the execution history of a scheduled job.
+func (m Model) viewSchedHistory() string {
+	title := TitleStyle.Render(fmt.Sprintf("🕘 History: %s", m.schedHistName))
+	meta := MutedStyle.Render(fmt.Sprintf("  %d runs · auto-refresh 1s", len(m.schedHist)))
+
+	maxLines := m.height - 11
+	if maxLines < 3 {
+		maxLines = 3
+	}
+
+	var body string
+	switch {
+	case len(m.schedHist) == 0:
+		body = HelpStyle.Render("  No runs recorded yet — press r on the Schedules tab to trigger one.")
+	default:
+		// Newest first, capped to the visible area.
+		start := 0
+		if len(m.schedHist) > maxLines {
+			start = len(m.schedHist) - maxLines
+		}
+		okStyle := lipgloss.NewStyle().Foreground(Success)
+		badStyle := lipgloss.NewStyle().Foreground(Error)
+		tsStyle := lipgloss.NewStyle().Foreground(Subtle)
+		var sb strings.Builder
+		for i := len(m.schedHist) - 1; i >= start; i-- {
+			h := m.schedHist[i]
+			status := okStyle.Render("OK")
+			if h.ExitCode != 0 || h.Error != "" {
+				status = badStyle.Render("FAILED")
+			}
+			sb.WriteString(tsStyle.Render(h.StartTime.Format("01-02 15:04:05")) + " ")
+			sb.WriteString(status + " ")
+			sb.WriteString(fmt.Sprintf("%.0fms", float64(h.Duration)/1e6))
+			if h.Error != "" {
+				sb.WriteString("  " + badStyle.Render(truncate(h.Error, 40)))
+			}
+			sb.WriteString("\n")
+		}
+		body = lipgloss.NewStyle().Padding(0, 2).Render(strings.TrimRight(sb.String(), "\n"))
+	}
+
+	footer := HelpStyle.Render("  Esc/backspace: back  (auto-refreshes 1s)")
+	main := lipgloss.JoinVertical(lipgloss.Left, title+meta, "", body)
+	return pinFooter(main, footer, m.height)
+}
+
 // Help view.
 func (m Model) viewHelp() string {
 	help := `
@@ -669,6 +753,8 @@ func (m Model) viewHelp() string {
 
   Schedule Actions
     r                Trigger the selected job immediately
+    e                Enable/disable the selected job (persisted)
+    h                Show execution history of the selected job
 
   Detail / Log View
     Esc/backspace    Back to list

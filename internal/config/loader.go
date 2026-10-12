@@ -80,6 +80,10 @@ func loadFile(path string) (*Config, error) {
 	for name := range cfg.Processes {
 		cfg.ProcessSources[name] = path
 	}
+	cfg.ScheduleSources = make(map[string]string, len(cfg.Schedules))
+	for name := range cfg.Schedules {
+		cfg.ScheduleSources[name] = path
+	}
 
 	// Process includes.
 	for _, inc := range cfg.Includes {
@@ -151,6 +155,12 @@ func (c *Config) merge(other *Config) {
 			c.Schedules = make(map[string]ScheduleConfig)
 		}
 		c.Schedules[k] = v
+		if src, ok := other.ScheduleSources[k]; ok {
+			if c.ScheduleSources == nil {
+				c.ScheduleSources = make(map[string]string)
+			}
+			c.ScheduleSources[k] = src
+		}
 	}
 }
 
