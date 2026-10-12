@@ -60,6 +60,20 @@ type Model struct {
 
 var tabs = []string{"Processes", "Schedules", "Help"}
 
+// procCols defines the process table columns.
+// BOOT = starts automatically when starfleet starts (autostart);
+// AUTORESTART = restart policy when the process exits.
+var procCols = []table.Column{
+	{Title: "NAME", Width: 18},
+	{Title: "STATE", Width: 10},
+	{Title: "BOOT", Width: 6},
+	{Title: "PID", Width: 7},
+	{Title: "UPTIME", Width: 12},
+	{Title: "RETRIES", Width: 8},
+	{Title: "AUTORESTART", Width: 12},
+	{Title: "COMMAND", Width: 30},
+}
+
 // NewModel creates a new TUI model.
 func NewModel(manager Manager) Model {
 	s := spinner.New()
@@ -67,15 +81,6 @@ func NewModel(manager Manager) Model {
 	s.Style = lipgloss.NewStyle().Foreground(Primary)
 
 	// Process table with rich columns.
-	procCols := []table.Column{
-		{Title: "NAME", Width: 18},
-		{Title: "STATE", Width: 10},
-		{Title: "PID", Width: 7},
-		{Title: "UPTIME", Width: 14},
-		{Title: "RETRIES", Width: 8},
-		{Title: "AUTORESTART", Width: 12},
-		{Title: "COMMAND", Width: 35},
-	}
 	pt := table.New(
 		table.WithColumns(procCols),
 		table.WithFocused(true),
@@ -691,14 +696,19 @@ func (m *Model) refreshData() {
 	processes := m.manager.List()
 	rows := make([]table.Row, len(processes))
 	for i, p := range processes {
+		boot := "off"
+		if p.Autostart {
+			boot = "on"
+		}
 		rows[i] = table.Row{
 			p.Name,
 			p.State,
+			boot,
 			fmt.Sprintf("%d", p.PID),
 			formatUptime(p.Uptime),
 			fmt.Sprintf("%d", p.RetryCount),
 			p.Autorestart,
-			truncate(p.Command, 33),
+			truncate(p.Command, 28),
 		}
 	}
 	// Only touch the table when something actually changed — constant
