@@ -27,3 +27,29 @@ func TestListIsSortedByName(t *testing.T) {
 		}
 	}
 }
+
+func TestSetAutostart(t *testing.T) {
+	m := NewManager()
+	cfg := &config.Config{Processes: map[string]config.ProcessConfig{
+		"svc": {Command: "echo svc", Autostart: true},
+	}}
+	m.LoadFromConfig(cfg)
+
+	if err := m.SetAutostart("svc", false); err != nil {
+		t.Fatalf("disable: %v", err)
+	}
+	got, _ := m.GetConfig("svc")
+	if got.Autostart {
+		t.Error("autostart should be false after disable")
+	}
+	if err := m.SetAutostart("svc", true); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+	got, _ = m.GetConfig("svc")
+	if !got.Autostart {
+		t.Error("autostart should be true after enable")
+	}
+	if err := m.SetAutostart("nope", true); err == nil {
+		t.Error("expected error for unknown process")
+	}
+}

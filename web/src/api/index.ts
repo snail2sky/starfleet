@@ -92,6 +92,8 @@ export const getProcess = (name: string) =>
 export const startProcess = (name: string) => api.post(`/processes/${name}/start`)
 export const stopProcess = (name: string) => api.post(`/processes/${name}/stop`)
 export const restartProcess = (name: string) => api.post(`/processes/${name}/restart`)
+export const setProcessAutostart = (name: string, enabled: boolean) =>
+  api.post(`/processes/${name}/${enabled ? 'enable' : 'disable'}`)
 
 // Log API
 /** Special source selector value: starfleet's own server logs. */

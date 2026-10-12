@@ -47,6 +47,20 @@
             <span class="tnum">{{ fmtUptime(row) }}</span>
           </template>
         </el-table-column>
+        <el-table-column label="Autostart" width="105">
+          <template #default="{ row }">
+            <button
+              class="toggle"
+              :class="{ 'toggle--on': row.autostart }"
+              :title="row.autostart ? 'Starts with starfleet — click to disable' : 'Manual start only — click to enable'"
+              :disabled="toggling === row.name"
+              @click.stop="toggleAutostart(row)"
+            >
+              <span class="toggle__dot"></span>
+              {{ row.autostart ? 'ON' : 'OFF' }}
+            </button>
+          </template>
+        </el-table-column>
         <el-table-column label="Retries" width="85">
           <template #default="{ row }">
             <span class="tnum">{{ row.retry_count }}</span>
@@ -104,10 +118,11 @@ import { storeToRefs } from 'pinia'
 import { useProcessStore } from '@/stores/process'
 import { ElMessage } from 'element-plus'
 import ProcessDetail from '@/components/ProcessDetail.vue'
-import type { ProcessInfo } from '@/api'
+import { setProcessAutostart, type ProcessInfo } from '@/api'
 
 const processStore = useProcessStore()
 const { processes, loading } = storeToRefs(processStore)
+const toggling = ref<string>('')
 
 const filter = ref('')
 const filtered = computed(() => {
@@ -145,6 +160,25 @@ function fmtUptime(p: ProcessInfo) {
 async function act(name: string, action: 'start' | 'stop' | 'restart') {
   await processStore[action](name)
   processStore.fetchProcesses()
+}
+
+/** Toggle boot-start; the server persists it into the process's config file. */
+async function toggleAutostart(row: ProcessInfo) {
+  toggling.value = row.name
+  try {
+    await setProcessAutostart(row.name, !row.autostart)
+    await processStore.fetchProcesses()
+    ElMessage.success(
+      row.autostart
+        ? `${row.name} will no longer start on boot`
+        : `${row.name} now starts on boot`,
+    )
+  } catch (e: any) {
+    const warning = e?.response?.data?.warning
+    ElMessage.error(warning || `Failed to change autostart for ${row.name}`)
+  } finally {
+    toggling.value = ''
+  }
 }
 
 /* ---------- detail dialog ---------- */
@@ -239,6 +273,36 @@ onMounted(() => processStore.fetchProcesses())
 .cell-actions {
   display: flex;
   gap: 6px;
+}
+
+/* autostart toggle */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 24px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.toggle:disabled { opacity: 0.5; cursor: wait; }
+.toggle__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.toggle--on {
+  color: var(--good);
+  background: var(--good-soft);
+  border-color: rgba(12, 163, 12, 0.35);
 }
 .tnum { font-variant-numeric: tabular-nums; color: var(--ink-2); }
 </style>

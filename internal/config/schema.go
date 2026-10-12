@@ -26,6 +26,9 @@ type Config struct {
 	// ConfDirResolved is the absolute managed-config directory actually used
 	// (from conf_dir or auto-discovered conf.d). Runtime info only.
 	ConfDirResolved string `yaml:"-" json:"conf_dir_resolved,omitempty"`
+	// ProcessSources maps process name → config file that defines it
+	// (last writer wins), used by enable/disable persistence. Runtime only.
+	ProcessSources map[string]string `yaml:"-" json:"-"`
 }
 
 // ServerConfig is the HTTP server configuration.
@@ -35,6 +38,13 @@ type ServerConfig struct {
 	ReadTimeout  time.Duration `yaml:"read_timeout" json:"read_timeout"`
 	WriteTimeout time.Duration `yaml:"write_timeout" json:"write_timeout"`
 	Auth         AuthConfig    `yaml:"auth" json:"auth"`
+	Web          WebConfig     `yaml:"web" json:"web"`
+}
+
+// WebConfig controls the embedded web UI. Set enabled: false to run
+// headless (API + TUI only, no frontend served).
+type WebConfig struct {
+	Enabled bool `yaml:"enabled" json:"enabled"`
 }
 
 // AuthConfig is the authentication configuration.
@@ -136,6 +146,9 @@ func DefaultConfig() *Config {
 			WriteTimeout: 30 * time.Second,
 			Auth: AuthConfig{
 				Enabled: false,
+			},
+			Web: WebConfig{
+				Enabled: true,
 			},
 		},
 		Processes: make(map[string]ProcessConfig),

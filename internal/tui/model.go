@@ -35,6 +35,9 @@ type Model struct {
 	procTable table.Model
 	lastRows  []table.Row // cache: skip re-render when unchanged
 
+	// Schedules list
+	lastSchedRows []table.Row
+
 	// Detail view
 	detailName  string
 	detailLines []string
@@ -87,10 +90,9 @@ func NewModel(manager Manager) Model {
 	schedCols := []table.Column{
 		{Title: "NAME", Width: 18},
 		{Title: "CRON", Width: 14},
-		{Title: "TYPE", Width: 6},
-		{Title: "COMMAND / URL", Width: 40},
 		{Title: "ENABLED", Width: 8},
-		{Title: "TIMEOUT", Width: 10},
+		{Title: "NEXT RUN", Width: 20},
+		{Title: "COMMAND / URL", Width: 40},
 	}
 	st := table.New(
 		table.WithColumns(schedCols),
@@ -289,6 +291,22 @@ func (m Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.showMessage(fmt.Sprintf("✓ Restarted %s", name))
 				}
 			}
+
+		case key.Matches(msg, key.NewBinding(key.WithKeys("e"))):
+			// Toggle boot-start (autostart) for the selected process.
+			name := m.selectedProcess()
+			if name != "" {
+				info, err := m.manager.Get(name)
+				if err != nil {
+					m.showMessage(fmt.Sprintf("✗ %v", err))
+				} else if err := m.manager.SetAutostart(name, !info.Autostart); err != nil {
+					m.showMessage(fmt.Sprintf("✗ %v", err))
+				} else if info.Autostart {
+					m.showMessage(fmt.Sprintf("✓ %s will not start on boot", name))
+				} else {
+					m.showMessage(fmt.Sprintf("✓ %s starts on boot", name))
+				}
+			}
 		}
 
 	case 1: // Schedules
@@ -297,6 +315,15 @@ func (m Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.schedTable.MoveUp(1)
 		case key.Matches(msg, key.NewBinding(key.WithKeys("down", "j"))):
 			m.schedTable.MoveDown(1)
+		case key.Matches(msg, key.NewBinding(key.WithKeys("r"))):
+			row := m.schedTable.SelectedRow()
+			if len(row) > 0 {
+				if err := m.manager.RunSchedule(row[0]); err != nil {
+					m.showMessage(fmt.Sprintf("✗ %v", err))
+				} else {
+					m.showMessage(fmt.Sprintf("✓ triggered %s", row[0]))
+				}
+			}
 		}
 	}
 	return m, nil
@@ -419,9 +446,9 @@ func (m Model) renderStatusBar() string {
 	var left string
 	switch m.tab {
 	case 0:
-		left = HelpStyle.Render("↑↓ move  ←→ tabs  Enter detail  l logs  0 srv logs  s start  t stop  r restart  q quit")
+		left = HelpStyle.Render("↑↓ move  ←→ tabs  Enter detail  l logs  0 srv logs  s start  t stop  r restart  e enable/disable  q quit")
 	case 1:
-		left = HelpStyle.Render("↑↓ move  q quit")
+		left = HelpStyle.Render("↑↓ move  r run now  ←→ tabs  q quit")
 	default:
 		left = HelpStyle.Render("q quit")
 	}
@@ -633,6 +660,9 @@ func (m Model) viewHelp() string {
     t                Stop selected process
     r                Restart selected process
 
+  Schedule Actions
+    r                Trigger the selected job immediately
+
   Detail / Log View
     Esc/backspace    Back to list
     ↑↓               Scroll content
@@ -674,10 +704,41 @@ func (m *Model) refreshData() {
 	// Only touch the table when something actually changed — constant
 	// SetRows calls (nanosecond uptimes) caused visible row flicker.
 	if rowsEqual(m.lastRows, rows) {
+		m.refreshSchedules()
 		return
 	}
 	m.lastRows = rows
 	m.procTable.SetRows(rows)
+	m.refreshSchedules()
+}
+
+// refreshSchedules keeps the schedules table populated (it used to be
+// created but never filled, so the tab was always blank).
+func (m *Model) refreshSchedules() {
+	jobs := m.manager.Schedules()
+	rows := make([]table.Row, 0, len(jobs))
+	for _, j := range jobs {
+		cmdOrURL := j.Command
+		if cmdOrURL == "" {
+			cmdOrURL = j.URL
+		}
+		next := j.NextRun
+		if next == "" {
+			next = "—"
+		}
+		rows = append(rows, table.Row{
+			j.Name,
+			j.Cron,
+			fmt.Sprintf("%t", j.Enabled),
+			next,
+			truncate(cmdOrURL, 30),
+		})
+	}
+	if rowsEqual(m.lastSchedRows, rows) {
+		return
+	}
+	m.lastSchedRows = rows
+	m.schedTable.SetRows(rows)
 }
 
 // rowsEqual reports whether two table row sets are identical.

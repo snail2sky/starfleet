@@ -16,7 +16,8 @@ type Router struct {
 }
 
 // NewRouter creates and configures the API router.
-func NewRouter(mgr *engine.Manager, sched *scheduler.Scheduler, hub *ws.Hub, cfg *config.Config, reloadFn func() error) *Router {
+// persistAutostart writes enable/disable back to config files (optional).
+func NewRouter(mgr *engine.Manager, sched *scheduler.Scheduler, hub *ws.Hub, cfg *config.Config, reloadFn func() error, persistAutostart func(name string, enabled bool) error) *Router {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -33,6 +34,9 @@ func NewRouter(mgr *engine.Manager, sched *scheduler.Scheduler, hub *ws.Hub, cfg
 
 	// Handlers.
 	processH := handler.NewProcessHandler(mgr)
+	if persistAutostart != nil {
+		processH.SetAutostartPersister(persistAutostart)
+	}
 	systemH := handler.NewSystemHandler()
 	configH := handler.NewConfigHandler(cfg, reloadFn)
 	scheduleH := handler.NewScheduleHandler(sched)
@@ -52,6 +56,8 @@ func NewRouter(mgr *engine.Manager, sched *scheduler.Scheduler, hub *ws.Hub, cfg
 			procs.POST("/:name/start", processH.Start)
 			procs.POST("/:name/stop", processH.Stop)
 			procs.POST("/:name/restart", processH.Restart)
+			procs.POST("/:name/enable", processH.Enable)
+			procs.POST("/:name/disable", processH.Disable)
 			procs.GET("/:name/logs", processH.Logs)
 		}
 
@@ -89,8 +95,11 @@ func NewRouter(mgr *engine.Manager, sched *scheduler.Scheduler, hub *ws.Hub, cfg
 		}
 	}
 
-	// Serve embedded Vue frontend (SPA with history-mode fallback).
-	ServeStatic(r)
+	// Serve embedded Vue frontend (SPA with history-mode fallback) unless
+	// disabled in config — headless deployments keep only the API.
+	if cfg.Server.Web.Enabled {
+		ServeStatic(r)
+	}
 
 	return &Router{engine: r}
 }

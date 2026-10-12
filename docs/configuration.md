@@ -83,6 +83,7 @@ includes:
 | `auth.username` | string | — | 认证用户名 |
 | `auth.password` | string | — | 认证密码 |
 | `auth.secret` | string | — | JWT 签名密钥 |
+| `web.enabled` | bool | `true` | 是否提供内置 Web UI。设为 `false` 则只运行 API + TUI（无头模式，适合纯命令行/远程管控） |
 
 ```yaml
 server:

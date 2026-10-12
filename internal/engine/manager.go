@@ -134,6 +134,20 @@ type ProcessInfo struct {
 	Labels      map[string]string `json:"labels"`
 }
 
+// SetAutostart toggles whether a process starts with starfleet (boot).
+// It does not affect a currently running process; use Start/Stop for that.
+func (m *Manager) SetAutostart(name string, enabled bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cfg, ok := m.configs[name]
+	if !ok {
+		return fmt.Errorf("process %q not found", name)
+	}
+	cfg.Autostart = enabled
+	m.configs[name] = cfg
+	return nil
+}
+
 // GetConfig returns the full configuration of a process.
 func (m *Manager) GetConfig(name string) (config.ProcessConfig, error) {
 	m.mu.RLock()

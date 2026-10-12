@@ -76,6 +76,10 @@ func loadFile(path string) (*Config, error) {
 		return nil, fmt.Errorf("parse config %s: %w", path, err)
 	}
 	cfg.LoadedFiles = []string{path}
+	cfg.ProcessSources = make(map[string]string, len(cfg.Processes))
+	for name := range cfg.Processes {
+		cfg.ProcessSources[name] = path
+	}
 
 	// Process includes.
 	for _, inc := range cfg.Includes {
@@ -130,11 +134,17 @@ func (c *Config) loadDir(dir string) error {
 // Processes and schedules from the other config override existing ones.
 func (c *Config) merge(other *Config) {
 	c.LoadedFiles = append(c.LoadedFiles, other.LoadedFiles...)
+	if c.ProcessSources == nil {
+		c.ProcessSources = make(map[string]string)
+	}
 	for k, v := range other.Processes {
 		if c.Processes == nil {
 			c.Processes = make(map[string]ProcessConfig)
 		}
 		c.Processes[k] = v
+		if src, ok := other.ProcessSources[k]; ok {
+			c.ProcessSources[k] = src // later file wins
+		}
 	}
 	for k, v := range other.Schedules {
 		if c.Schedules == nil {

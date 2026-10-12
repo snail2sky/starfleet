@@ -239,7 +239,21 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 	mgr.StartAll()
 
-	router := api.NewRouter(mgr, sched, hub, cfg, reloadConfig)
+	// persistAutostart writes an enable/disable toggle back into the
+	// conf fragment that defines the process (comments preserved).
+	persistAutostart := func(name string, enabled bool) error {
+		fresh, err := config.Load(cfgPath)
+		if err != nil {
+			return err
+		}
+		src, ok := fresh.ProcessSources[name]
+		if !ok {
+			return fmt.Errorf("cannot locate the config file defining %q", name)
+		}
+		return config.SetProcessAutostart(src, name, enabled)
+	}
+
+	router := api.NewRouter(mgr, sched, hub, cfg, reloadConfig, persistAutostart)
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	go func() {
 		slog.Info("api server starting", "addr", addr)
@@ -297,9 +311,18 @@ func runTUI(cmd *cobra.Command, args []string) error {
 		slog.Info("tui: no server found, running in standalone mode")
 		local := engine.NewManager()
 		local.LoadFromConfig(cfg)
+		// Standalone TUI also runs a scheduler so the Schedules tab works.
+		localBus := event.NewBus(64)
+		defer localBus.Close()
+		localSched := scheduler.NewScheduler(localBus)
+		if err := localSched.LoadFromConfig(cfg); err != nil {
+			slog.Warn("tui: schedules not loaded", "error", err)
+		}
+		localSched.Start()
 		local.StartAll()
 		defer local.StopAll()
-		mgr = tui.NewLocalManager(local)
+		defer localSched.Stop()
+		mgr = tui.NewLocalManager(local, localSched)
 	}
 	if err := tui.RunTUI(mgr, apiURL); err != nil {
 		slog.Error("tui error", "error", err)

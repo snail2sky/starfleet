@@ -93,6 +93,15 @@ func (c *Client) Restart(name string) error {
 	return c.post("/api/v1/processes/" + name + "/restart")
 }
 
+// SetAutostart toggles boot-start for a process (persisted server-side).
+func (c *Client) SetAutostart(name string, enabled bool) error {
+	action := "disable"
+	if enabled {
+		action = "enable"
+	}
+	return c.post("/api/v1/processes/" + name + "/" + action)
+}
+
 /* ---------- logs ---------- */
 
 // Logs returns recent log lines for a process.

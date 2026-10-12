@@ -122,6 +122,8 @@ notifications:
 | POST | `/api/v1/processes/:name/start` | Start process |
 | POST | `/api/v1/processes/:name/stop` | Stop process |
 | POST | `/api/v1/processes/:name/restart` | Restart process |
+| POST | `/api/v1/processes/:name/enable` | Enable boot-start (persisted to config file) |
+| POST | `/api/v1/processes/:name/disable` | Disable boot-start (persisted to config file) |
 
 ### Schedules
 

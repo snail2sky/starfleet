@@ -11,11 +11,19 @@ import (
 // ProcessHandler handles process-related API requests.
 type ProcessHandler struct {
 	manager *engine.Manager
+	// persistAutostart writes the new autostart value back to the config
+	// file that defines the process. Optional (nil = runtime only).
+	persistAutostart func(name string, enabled bool) error
 }
 
 // NewProcessHandler creates a new ProcessHandler.
 func NewProcessHandler(mgr *engine.Manager) *ProcessHandler {
 	return &ProcessHandler{manager: mgr}
+}
+
+// SetAutostartPersister injects the config-file persistence hook.
+func (h *ProcessHandler) SetAutostartPersister(fn func(name string, enabled bool) error) {
+	h.persistAutostart = fn
 }
 
 // List returns all processes.
@@ -71,6 +79,37 @@ func (h *ProcessHandler) Restart(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "process restarted", "name": name})
 }
+
+// setAutostart enables/disables boot-start and persists it to the config.
+func (h *ProcessHandler) setAutostart(c *gin.Context, enabled bool) {
+	name := c.Param("name")
+	if err := h.manager.SetAutostart(name, enabled); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	if h.persistAutostart != nil {
+		if err := h.persistAutostart(name, enabled); err != nil {
+			// Runtime state already changed; report the persistence failure
+			// so the user knows the change may not survive a restart.
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   err.Error(),
+				"warning": "changed in memory but not persisted to config file",
+			})
+			return
+		}
+	}
+	state := "disabled"
+	if enabled {
+		state = "enabled"
+	}
+	c.JSON(http.StatusOK, gin.H{"message": name + " " + state, "autostart": enabled})
+}
+
+// Enable turns on boot-start for a process.
+func (h *ProcessHandler) Enable(c *gin.Context) { h.setAutostart(c, true) }
+
+// Disable turns off boot-start for a process (stays running until stopped).
+func (h *ProcessHandler) Disable(c *gin.Context) { h.setAutostart(c, false) }
 
 // parseLines extracts the ?lines= query parameter with a default and cap.
 func parseLines(c *gin.Context, def, max int) int {
