@@ -1,63 +1,68 @@
 # Starfleet - Project Documentation
 
 ## Overview
-Starfleet is a modern process management and scheduling platform built with Go (backend) and Vue 3 (frontend). It's a supervisord alternative with web UI, real-time logs, health checks, and hot-reload.
+Starfleet is a process management and scheduling platform (Go backend, Vue 3
+frontend): a supervisord replacement with a web dashboard, a TUI, a CLI, real-time
+logs, health checks and hot reload. Current release: **v1.0.1**.
 
 ## Tech Stack
-- **Backend**: Go 1.23+, Gin, robfig/cron/v3, gopsutil/v4, coder/websocket
-- **Frontend**: Vue 3, Vite, Pinia, Vue Router, Element Plus
-- **Testing**: Go testing + testify (planned)
-- **CI/CD**: GitHub Actions
+- **Backend**: Go 1.23+, Gin, robfig/cron/v3, gopsutil/v4, coder/websocket,
+  google/shlex, spf13/cobra
+- **Frontend**: Vue 3 + `<script setup>`, Vite, Pinia, Vue Router, Element Plus
+- **Terminal UI**: bubbletea / bubbles / lipgloss
+- **Testing**: stdlib testing + table-driven tests; `stretchr/testify` not used
+- **CI/CD**: GitHub Actions (ci.yml per push; release.yml per `v*` tag → 5 platform binaries)
 
 ## Project Structure
-- `cmd/starfleet/` — Main entry point
-- `internal/engine/` — Process state machine and manager
-- `internal/config/` — YAML configuration loading
-- `internal/scheduler/` — Cron job scheduling
-- `internal/event/` — In-process event bus
-- `internal/api/` — Gin HTTP API, WebSocket, middleware
-- `internal/notify/` — Webhook notifications
-- `web/` — Vue 3 frontend source
-- `configs/` — Example configuration files
-- `deploy/` — Docker, systemd deployment files
+- `cmd/starfleet/` — CLI (cobra): main.go (server/TUI/validate/status), control.go (start/stop/restart/reload/logs/run/schedules)
+- `internal/engine/` — process state machine, manager, log collector, file log rotation, health checks
+- `internal/config/` — YAML loading (conf_dir/conf.d/includes), watcher, in-place field persistence (yaml.Node)
+- `internal/scheduler/` — cron jobs, enable/disable, history ring
+- `internal/api/` — Gin routes, handlers, WS hub, embedded SPA (static.go)
+- `internal/client/` — HTTP client shared by TUI (remote) and CLI control commands
+- `internal/selflog/` — starfleet's own logs mirrored into a ring buffer
+- `internal/tui/` — bubbletea UI (local + remote managers behind one interface)
+- `internal/event/`, `internal/notify/` — event bus, webhooks
+- `web/` — Vue 3 frontend; build output is embedded at `internal/api/dist`
+- `configs/` — example config + `conf.d/` sample fragment
+- `deploy/` — Dockerfile, docker-compose, systemd unit, `stf` wrapper
+- `docs/configuration.md` — **authoritative** config reference
 
 ## Build Commands
 ```bash
-# Full build (frontend + Go)
-make all
-
-# Go only (requires frontend pre-built)
-make build
-
-# Frontend only
-cd web && npm run build
-
-# Run tests
-make test
-
-# Lint
+make            # frontend + binary into bin/
+make frontend   # build web → internal/api/dist
+make test       # go test ./... -race
 make lint
+make run        # build + run with configs/starfleet.yml
 ```
 
 ## Key Design Decisions
-- Process state machine: STOPPED → STARTING → RUNNING → STOPPING → STOPPED/FATAL/BACKOFF
-- Config hot-reload via polling (5s interval)
-- WebSocket hub for real-time log/event streaming
-- Single binary with embedded frontend via go:embed
+- Process state machine: STOPPED → STARTING → RUNNING → STOPPING → FATAL/BACKOFF/EXITED
+- supervisord-compatible retry semantics: only runs shorter than `startsecs`
+  accumulate toward FATAL; a process that started OK restarts forever with
+  capped backoff
+- Single binary, frontend embedded via `go:embed` (keep
+  `internal/api/dist/.gitkeep` so fresh clones compile)
+- Cache policy: index.html `no-store`, hashed `/assets/*` `immutable`
+- Config hot reload: fingerprint of all loaded files; reloads **both**
+  processes and schedules
+- Enable/disable writes the single scalar back to the defining config file
+  (yaml.Node round-trip keeps comments)
+- Stable ordering everywhere (never iterate maps for display lists)
 
 ## Testing
 ```bash
-# All Go tests
-go test ./...
-
-# Specific package
-go test ./internal/engine/ -v
-
-# With coverage
-go test ./... -coverprofile=coverage.out
+go test ./... -race
+go test ./internal/config/ -v        # config loading + persistence
+go test ./internal/scheduler/ -v    # cron + enable/disable
 ```
 
 ## Common Tasks
-- Add new process config: edit `configs/starfleet.yml` under `processes:`
-- Add new API endpoint: add handler in `internal/api/handler/`, register in `internal/api/router.go`
-- Add new Vue page: create in `web/src/views/`, register in `web/src/router/index.ts`
+- New process field: `internal/config/schema.go` → update
+  `docs/configuration.md` + `TestFullConfigFields` **in the same commit**
+- New API endpoint: handler in `internal/api/handler/`, register in `router.go`,
+  add client method in `internal/client/client.go`
+- New TUI feature: keys in `internal/tui/model.go`, keep the web UI in parity
+  (README parity table)
+- Release: tag `v1.0.2` etc. — `release.yml` builds the matrix

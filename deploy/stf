@@ -1,0 +1,27 @@
+#!/bin/sh
+# stf — starfleet wrapper
+#
+# Bakes in the install paths so you can just type `stf ...` instead of
+# `starfleet -c /data0/apps/starfleet/starfleet.yml ...`.
+#
+# Examples:
+#   stf                     # help
+#   stf status              # process states of the running server
+#   stf tui                 # terminal UI (connects to the running server)
+#   stf logs -f             # follow starfleet's own logs
+#   stf start ttyd          # start a managed process
+#   stf schedules           # list scheduled jobs
+#   stf validate            # check the configuration
+#   stf serve               # run the server in the foreground
+#
+# Passing your own -c/--config overrides the baked-in path (last flag wins).
+
+STARFLEET_BIN=/data0/apps/starfleet/starfleet
+STARFLEET_CONFIG=/data0/apps/starfleet/starfleet.yml
+
+if [ ! -x "$STARFLEET_BIN" ]; then
+    echo "stf: $STARFLEET_BIN not found or not executable" >&2
+    exit 127
+fi
+
+exec "$STARFLEET_BIN" -c "$STARFLEET_CONFIG" "$@"
