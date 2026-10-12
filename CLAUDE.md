@@ -52,7 +52,10 @@ make run        # build + run with configs/starfleet.yml
 - Auth: `server.auth` guards `/api/v1` with Basic **or** Bearer JWT
   (`POST /api/v1/auth/login`, WebUI login page); `/health` reports the
   `auth` flag unauthenticated; CLI/TUI creds: `--user/--password` >
-  `$STARFLEET_USER/$STARFLEET_PASSWORD` > config `auth.*`
+  `$STARFLEET_USER/$STARFLEET_PASSWORD` > config `auth.*`; empty
+  `secret` auto-generates a random JWT key (forgery-safe); login is
+  rate-limited per IP (10 fails / 5 min); CORS + WebSocket are
+  same-origin only; `SetTrustedProxies(nil)` (no XFF spoofing)
 - Enable/disable and autorestart policy changes write the single value back
   to the defining config file (yaml.Node round-trip keeps comments)
 - Stable ordering everywhere (never iterate maps for display lists)

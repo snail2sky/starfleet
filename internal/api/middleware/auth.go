@@ -1,7 +1,9 @@
 package middleware
 
 import (
+	"crypto/rand"
 	"crypto/subtle"
+	"encoding/hex"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -25,21 +27,40 @@ type AuthState struct {
 	v atomic.Pointer[AuthConfig]
 }
 
-// NewAuthState creates a state preloaded with cfg.
+// NewAuthState creates a state preloaded with cfg. If auth is enabled but
+// no JWT secret is configured, a random one is generated — an empty secret
+// would let anyone forge valid tokens (HS256 with an empty key).
 func NewAuthState(cfg AuthConfig) *AuthState {
+	if cfg.Enabled && cfg.Secret == "" {
+		cfg.Secret = newSecret()
+	}
 	s := &AuthState{}
 	s.v.Store(&cfg)
 	return s
 }
 
-// Store replaces the active auth configuration (config reload).
+// Store replaces the active auth configuration (config reload). An empty
+// incoming secret keeps the current one: sessions stay valid across
+// reloads and the secret never regresses to forgeable-empty.
 func (s *AuthState) Store(cfg AuthConfig) {
+	if prev := s.v.Load(); cfg.Secret == "" && prev != nil {
+		cfg.Secret = prev.Secret
+	}
 	s.v.Store(&cfg)
 }
 
 // Load returns the active auth configuration.
 func (s *AuthState) Load() AuthConfig {
 	return *s.v.Load()
+}
+
+// newSecret returns a 256-bit random secret as hex.
+func newSecret() string {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		panic("crypto/rand failed: " + err.Error())
+	}
+	return hex.EncodeToString(b)
 }
 
 // JWTClaims represents JWT token claims.

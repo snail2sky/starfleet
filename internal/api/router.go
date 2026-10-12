@@ -24,6 +24,10 @@ type Router struct {
 func NewRouter(mgr *engine.Manager, sched *scheduler.Scheduler, hub *ws.Hub, cfg *config.Config, auth *middleware.AuthState, loadCfg func() (*config.Config, error), reloadFn func() error, persistAutostart func(name string, enabled bool) error, persistAutorestart func(name string, value string) error, persistSchedule func(name string, enabled bool) error) *Router {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
+	// Real client IPs only: never trust X-Forwarded-For from arbitrary
+	// peers (gin trusts all proxies by default, which lets anyone spoof
+	// their address in logs and any future per-IP controls).
+	_ = r.SetTrustedProxies(nil)
 	r.Use(gin.Recovery())
 	r.Use(middleware.CORS())
 	r.Use(middleware.Logger())

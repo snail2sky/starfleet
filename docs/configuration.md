@@ -113,6 +113,9 @@ server:
   **立即生效**；`server.host`/`server.port`/`server.web.enabled`、`logging`、
   `notifications` 的变更无法热应用，reload 时会打 `WARN ... require a
   restart` 日志，需要重启服务。
+- **安全**：`secret` 留空时启动自动生成随机 JWT 密钥（配置后跨重启保持会话）；
+  登录接口按 IP 限流（5 分钟内 10 次失败 → 429）；CORS 与 WebSocket 仅允许
+  同源；`X-Forwarded-For` 不被信任（日志记录真实来源 IP）。
 
 ---
 

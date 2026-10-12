@@ -132,3 +132,46 @@ func TestAuthStateHotUpdate(t *testing.T) {
 		t.Fatalf("after disable: expected 200, got %d", w.Code)
 	}
 }
+
+// TestAuthStateGeneratesSecret: an enabled config with no secret must get
+// a random one — HS256 with an empty key would let anyone forge tokens.
+func TestAuthStateGeneratesSecret(t *testing.T) {
+	s := NewAuthState(AuthConfig{Enabled: true, Username: "u", Password: "p"})
+	if s.Load().Secret == "" {
+		t.Fatal("expected auto-generated secret, got empty")
+	}
+	// Reload with no secret keeps the current one (sessions stay valid).
+	s.Store(AuthConfig{Enabled: true, Username: "u", Password: "p2"})
+	if s.Load().Secret == "" {
+		t.Fatal("Store must not regress the secret to empty")
+	}
+	// An explicitly configured secret is adopted.
+	s.Store(AuthConfig{Enabled: true, Username: "u", Password: "p2", Secret: "explicit"})
+	if s.Load().Secret != "explicit" {
+		t.Errorf("explicit secret not adopted: %q", s.Load().Secret)
+	}
+}
+
+// TestForgedEmptySecretRejected: the exact exploit from the audit — a
+// token signed with an empty key must be rejected by Authenticate.
+func TestForgedEmptySecretRejected(t *testing.T) {
+	cfg := AuthConfig{Enabled: true, Username: "admin", Password: "x"} // no secret
+	state := NewAuthState(cfg)
+	r := setupAuthRouterWith(state)
+
+	forged, err := GenerateToken(AuthConfig{Secret: ""}, "admin", time.Hour)
+	if err != nil {
+		t.Fatalf("forge: %v", err)
+	}
+	if w := doAuthReq(r, "Bearer "+forged); w.Code != http.StatusUnauthorized {
+		t.Fatalf("forged empty-secret token accepted! status=%d", w.Code)
+	}
+}
+
+func setupAuthRouterWith(state *AuthState) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(Authenticate(state))
+	r.GET("/x", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) })
+	return r
+}

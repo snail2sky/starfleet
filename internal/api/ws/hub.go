@@ -99,9 +99,10 @@ func (h *Hub) Broadcast(msg Message) {
 // HandleWebSocket handles WebSocket upgrade requests.
 func (h *Hub) HandleWebSocket(filter MessageType) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		conn, err := websocket.Accept(c.Writer, c.Request, &websocket.AcceptOptions{
-			InsecureSkipVerify: true,
-		})
+		// nil options = library default origin verification: browser
+		// connections must be same-origin (Origin matches Host); non-browser
+		// clients send no Origin and are allowed.
+		conn, err := websocket.Accept(c.Writer, c.Request, nil)
 		if err != nil {
 			slog.Error("websocket accept error", "error", err)
 			return

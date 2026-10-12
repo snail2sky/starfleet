@@ -71,3 +71,43 @@ func TestLoginAuthDisabled(t *testing.T) {
 		t.Errorf("expected 400 when auth disabled, got %d", w.Code)
 	}
 }
+
+// TestLoginRateLimit: after loginFails wrong attempts from one IP the
+// endpoint must answer 429 (brute-force protection from the security audit).
+func TestLoginRateLimit(t *testing.T) {
+	cfg := middleware.AuthConfig{Enabled: true, Username: "admin", Password: "secret", Secret: "k"}
+	r := setupAuthRoutes(cfg)
+	for i := 0; i < loginFails; i++ {
+		w := postLogin(r, `{"username":"admin","password":"wrong"}`)
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d: expected 401, got %d", i, w.Code)
+		}
+	}
+	// Next attempt — even the correct password — must be throttled.
+	w := postLogin(r, `{"username":"admin","password":"secret"}`)
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 after %d failures, got %d", loginFails, w.Code)
+	}
+}
+
+// TestLoginBodyTooLarge: request bodies above maxLoginBody get 413.
+func TestLoginBodyTooLarge(t *testing.T) {
+	cfg := middleware.AuthConfig{Enabled: true, Username: "admin", Password: "secret", Secret: "k"}
+	r := setupAuthRoutes(cfg)
+	big := `{"username":"a","password":"` + string(make([]byte, maxLoginBody+1024)) + `"}`
+	for i := range []byte(big[len(big)-2048:]) {
+		_ = i
+	}
+	body := make([]byte, 0, len(big))
+	for _, ch := range []byte(big) {
+		if ch == 0 {
+			body = append(body, 'A')
+		} else {
+			body = append(body, ch)
+		}
+	}
+	w := postLogin(r, string(body))
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413 for oversized body, got %d", w.Code)
+	}
+}
