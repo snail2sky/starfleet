@@ -1,6 +1,9 @@
 package api
 
 import (
+	"net/http"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/snail2sky/starfleet/internal/api/handler"
 	"github.com/snail2sky/starfleet/internal/api/middleware"
@@ -12,7 +15,9 @@ import (
 
 // Router sets up all API routes.
 type Router struct {
-	engine *gin.Engine
+	engine       *gin.Engine
+	readTimeout  time.Duration
+	writeTimeout time.Duration
 }
 
 // NewRouter creates and configures the API router.
@@ -114,10 +119,27 @@ func NewRouter(mgr *engine.Manager, sched *scheduler.Scheduler, hub *ws.Hub, cfg
 		ServeStatic(r)
 	}
 
-	return &Router{engine: r}
+	readTO := cfg.Server.ReadTimeout
+	if readTO <= 0 {
+		readTO = 30 * time.Second
+	}
+	writeTO := cfg.Server.WriteTimeout
+	if writeTO <= 0 {
+		writeTO = 30 * time.Second
+	}
+	return &Router{engine: r, readTimeout: readTO, writeTimeout: writeTO}
 }
 
-// Run starts the HTTP server.
+// Run starts the HTTP server with the configured timeouts. Without
+// ReadTimeout a slowloris client (sending headers byte by byte) pins a
+// goroutine forever and can exhaust the server.
 func (r *Router) Run(addr string) error {
-	return r.engine.Run(addr)
+	srv := &http.Server{
+		Addr:         addr,
+		Handler:      r.engine,
+		ReadTimeout:  r.readTimeout,
+		WriteTimeout: r.writeTimeout,
+		IdleTimeout:  120 * time.Second,
+	}
+	return srv.ListenAndServe()
 }
