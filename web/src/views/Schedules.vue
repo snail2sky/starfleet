@@ -37,6 +37,11 @@
             </span>
           </template>
         </el-table-column>
+        <el-table-column label="Next run" width="170">
+          <template #default="{ row }">
+            <span class="tnum next-run">{{ row.next_run || '—' }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="Timeout" width="95">
           <template #default="{ row }">
             <span class="tnum">{{ row.timeout }}</span>
@@ -100,7 +105,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   getSchedules,
@@ -116,13 +121,19 @@ const historyJob = ref('')
 const historyVisible = ref(false)
 const loading = ref(false)
 
+// Auto-refresh keeps Next-run accurate and self-heals an empty table.
+let refreshTimer: ReturnType<typeof setInterval> | null = null
+
 async function fetchSchedules() {
   loading.value = true
   try {
     const { data } = await getSchedules()
-    schedules.value = data.data
+    schedules.value = data.data ?? []
   } catch {
-    ElMessage.error('Failed to fetch schedules')
+    // Silent on background refresh; the manual Refresh button surfaces errors.
+    if (!schedules.value.length) {
+      ElMessage.error('Failed to fetch schedules')
+    }
   } finally {
     loading.value = false
   }
@@ -132,6 +143,7 @@ async function runJob(name: string) {
   try {
     await runSchedule(name)
     ElMessage.success(`Triggered "${name}"`)
+    await fetchSchedules()
   } catch {
     ElMessage.error(`Failed to trigger "${name}"`)
   }
@@ -155,7 +167,13 @@ function fmtDuration(ns: number): string {
   return `${(ms / 60_000).toFixed(1)}m`
 }
 
-onMounted(fetchSchedules)
+onMounted(() => {
+  fetchSchedules()
+  refreshTimer = setInterval(fetchSchedules, 30_000)
+})
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
+})
 </script>
 
 <style scoped>
@@ -199,6 +217,7 @@ onMounted(fetchSchedules)
 }
 .cell-actions { display: flex; gap: 6px; }
 .tnum { font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.next-run { color: var(--accent); }
 .cell-err { color: var(--crit); }
 
 .hist-summary {

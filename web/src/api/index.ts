@@ -61,8 +61,10 @@ export interface ScheduleInfo {
   cron: string
   type: string
   command: string
+  url?: string
   enabled: boolean
   timeout: string
+  next_run?: string
   labels: Record<string, string>
 }
 
