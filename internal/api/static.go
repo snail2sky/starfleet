@@ -12,6 +12,21 @@ import (
 //go:embed all:dist
 var distFS embed.FS
 
+// setCacheHeaders applies cache policy for the embedded SPA.
+// Hashed assets (/assets/*) are immutable and cached for a year; index.html
+// and the SPA fallback are never cached — embedded files have no validators
+// (zero modtime), so without explicit headers browsers keep serving stale
+// index.html that points at chunk names from an older build.
+func setCacheHeaders(c *gin.Context, path string) {
+	if strings.HasPrefix(path, "/assets/") {
+		c.Header("Cache-Control", "public, max-age=31536000, immutable")
+		return
+	}
+	c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+	c.Header("Pragma", "no-cache")
+	c.Header("Expires", "0")
+}
+
 // ServeStatic serves the embedded Vue frontend.
 func ServeStatic(r *gin.Engine) {
 	dist, err := fs.Sub(distFS, "dist")
@@ -23,6 +38,7 @@ func ServeStatic(r *gin.Engine) {
 	// Tell the user instead of serving a directory listing.
 	if _, statErr := dist.Open("index.html"); statErr != nil {
 		r.NoRoute(func(c *gin.Context) {
+			setCacheHeaders(c, c.Request.URL.Path)
 			path := c.Request.URL.Path
 			if strings.HasPrefix(path, "/api") || strings.HasPrefix(path, "/health") {
 				c.JSON(404, gin.H{"error": "not found"})
@@ -45,6 +61,7 @@ func ServeStatic(r *gin.Engine) {
 			c.JSON(404, gin.H{"error": "not found"})
 			return
 		}
+		setCacheHeaders(c, path)
 		// Try to serve static file.
 		f, err := dist.Open(strings.TrimPrefix(path, "/"))
 		if err != nil {
