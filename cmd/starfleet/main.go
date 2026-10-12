@@ -208,7 +208,9 @@ func runServe(cmd *cobra.Command, args []string) error {
 	sched.Start()
 	defer sched.Stop()
 
-	// reloadConfig reloads all config files and applies changes live.
+	// reloadConfig reloads all config files and applies changes live —
+	// BOTH the process manager and the scheduler (schedules added or
+	// removed in conf.d must take effect without a restart).
 	reloadConfig := func() error {
 		newCfg, err := config.Load(cfgPath)
 		if err != nil {
@@ -216,14 +218,21 @@ func runServe(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		bus.Publish(event.Event{Type: event.EventConfigReloaded})
-		slog.Info("config reloaded", "processes", len(newCfg.Processes), "schedules", len(newCfg.Schedules))
-		return mgr.ReloadConfig(newCfg)
+		if err := mgr.ReloadConfig(newCfg); err != nil {
+			return err
+		}
+		if err := sched.ReloadConfig(newCfg); err != nil {
+			slog.Error("schedule reload failed", "error", err)
+			return err
+		}
+		slog.Info("config reloaded",
+			"processes", len(newCfg.Processes), "schedules", len(newCfg.Schedules))
+		return nil
 	}
 
-	// Config watcher: hot-reload every 5s on file change.
+	// Config watcher: hot-reload every 5s on any loaded-file change.
 	watcher := config.NewWatcher(cfgPath, 5_000_000_000, func(newCfg *config.Config) error {
-		bus.Publish(event.Event{Type: event.EventConfigReloaded})
-		return mgr.ReloadConfig(newCfg)
+		return reloadConfig()
 	})
 	watcher.Start()
 	defer watcher.Stop()

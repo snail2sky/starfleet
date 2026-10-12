@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os/exec"
+	"reflect"
+	"sort"
 	"sync"
 	"time"
 
@@ -71,12 +73,19 @@ func (s *Scheduler) Stop() {
 	s.logger.Info("scheduler stopped")
 }
 
-// List returns all scheduled jobs (with NextRun filled in when scheduled).
+// List returns all scheduled jobs sorted by name (stable order for UI
+// refreshes — Go map iteration is randomized).
 func (s *Scheduler) List() []JobInfo {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	var list []JobInfo
-	for _, job := range s.jobs {
+	names := make([]string, 0, len(s.jobs))
+	for name := range s.jobs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	list := make([]JobInfo, 0, len(names))
+	for _, name := range names {
+		job := s.jobs[name]
 		info := job.Info()
 		s.fillNextRun(&info, job)
 		list = append(list, info)
@@ -123,20 +132,26 @@ func (s *Scheduler) History(name string, limit int) []HistoryEntry {
 	return s.history.Get(name, limit)
 }
 
-// ReloadConfig applies new schedule configuration.
+// ReloadConfig applies new schedule configuration: removes schedules that
+// disappeared, re-creates schedules whose definition changed (e.g. a new
+// cron expression), and registers newly added ones.
 func (s *Scheduler) ReloadConfig(cfg *config.Config) error {
-	// Stop removed jobs.
 	s.mu.Lock()
 	for name, job := range s.jobs {
-		if _, exists := cfg.Schedules[name]; !exists {
+		want, exists := cfg.Schedules[name]
+		if !exists || !reflect.DeepEqual(job.Config, want) {
 			s.cron.Remove(job.entryID)
 			delete(s.jobs, name)
-			s.logger.Info("removed schedule", "name", name)
+			if exists {
+				s.logger.Info("schedule changed, recreating", "name", name)
+			} else {
+				s.logger.Info("removed schedule", "name", name)
+			}
 		}
 	}
 	s.mu.Unlock()
 
-	// Add new jobs.
+	// Add (or re-add) all enabled schedules.
 	return s.LoadFromConfig(cfg)
 }
 

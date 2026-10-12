@@ -33,6 +33,7 @@ type Model struct {
 
 	// Process list
 	procTable table.Model
+	lastRows  []table.Row // cache: skip re-render when unchanged
 
 	// Detail view
 	detailName  string
@@ -664,13 +665,58 @@ func (m *Model) refreshData() {
 			p.Name,
 			p.State,
 			fmt.Sprintf("%d", p.PID),
-			p.Uptime,
+			formatUptime(p.Uptime),
 			fmt.Sprintf("%d", p.RetryCount),
 			p.Autorestart,
 			truncate(p.Command, 33),
 		}
 	}
+	// Only touch the table when something actually changed — constant
+	// SetRows calls (nanosecond uptimes) caused visible row flicker.
+	if rowsEqual(m.lastRows, rows) {
+		return
+	}
+	m.lastRows = rows
 	m.procTable.SetRows(rows)
+}
+
+// rowsEqual reports whether two table row sets are identical.
+func rowsEqual(a, b []table.Row) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if len(a[i]) != len(b[i]) {
+			return false
+		}
+		for j := range a[i] {
+			if a[i][j] != b[i][j] {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// formatUptime renders a coarse uptime so row content stays stable across
+// 1s refresh ticks ("2h15m" instead of "2h15m30.123456789s" which changed
+// every frame and made the table look like it was flickering).
+func formatUptime(raw string) string {
+	if raw == "" || raw == "0s" {
+		return "—"
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return raw
+	}
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()/5)*5)
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	default:
+		return fmt.Sprintf("%dh%02dm", int(d.Hours()), int(d.Minutes())%60)
+	}
 }
 
 func (m *Model) showMessage(msg string) {

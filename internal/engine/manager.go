@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"log/slog"
+	"sort"
 	"sync"
 
 	"github.com/snail2sky/starfleet/internal/config"
@@ -145,11 +146,21 @@ func (m *Manager) GetConfig(name string) (config.ProcessConfig, error) {
 }
 
 // List returns info about all configured processes.
+// List returns info about all configured processes, sorted by name.
+// A stable order matters: Go map iteration is randomized, and clients
+// (TUI/WebUI) re-render this list on every refresh — unsorted output
+// would shuffle rows every second.
 func (m *Manager) List() []ProcessInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	var list []ProcessInfo
-	for name, cfg := range m.configs {
+	names := make([]string, 0, len(m.configs))
+	for name := range m.configs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	list := make([]ProcessInfo, 0, len(names))
+	for _, name := range names {
+		cfg := m.configs[name]
 		info := ProcessInfo{
 			Name:        name,
 			State:       StateStopped.String(),
