@@ -215,6 +215,12 @@ func runServe(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Banner first (foreground only), so every subsequent log line lands
+	// below the box instead of interleaving with it.
+	if logPath == "" {
+		printBanner(cfg)
+	}
+
 	bus := event.NewBus(256)
 	defer bus.Close()
 
@@ -345,10 +351,6 @@ func runServe(cmd *cobra.Command, args []string) error {
 			slog.Error("api server error", "error", err)
 		}
 	}()
-
-	if logPath == "" {
-		printBanner(cfg)
-	}
 
 	// Signals: SIGHUP = reload config, SIGINT/SIGTERM = graceful stop.
 	sigCh := make(chan os.Signal, 1)
@@ -551,20 +553,43 @@ func modeName(tui, daemon bool) string {
 	return "foreground"
 }
 
+// printBanner renders the startup box as ONE write so a concurrent JSON
+// log line can never split the box drawing. All rows share one width.
 func printBanner(cfg *config.Config) {
-	fmt.Println()
-	fmt.Println("  ╔══════════════════════════════════════════════╗")
-	fmt.Println("  ║           🚀 Starfleet is running            ║")
-	fmt.Println("  ╠══════════════════════════════════════════════╣")
-	fmt.Printf("  ║  API:       http://%s:%-22s║\n", cfg.Server.Host, fmt.Sprintf("%d", cfg.Server.Port))
-	fmt.Printf("  ║  Config:    %-32s║\n", cfgPath)
-	fmt.Printf("  ║  Processes: %-32s║\n", fmt.Sprintf("%d loaded", len(cfg.Processes)))
-	fmt.Printf("  ║  Schedules: %-32s║\n", fmt.Sprintf("%d loaded", len(cfg.Schedules)))
-	fmt.Println("  ║  Mode:      foreground                       ║")
-	fmt.Println("  ║  TUI:       starfleet tui                    ║")
-	fmt.Println("  ║  Status:    starfleet status                 ║")
-	fmt.Println("  ║  Reload:    SIGHUP or POST /config/reload    ║")
-	fmt.Println("  ║  Stop:      Ctrl+C (SIGTERM)                 ║")
-	fmt.Println("  ╚══════════════════════════════════════════════╝")
-	fmt.Println()
+	const inner = 46 // display columns between the borders
+	const labelW = 12
+
+	var b strings.Builder
+	row := func(label, value string) {
+		body := fmt.Sprintf("  %-*s%s", labelW, label, value)
+		r := []rune(body)
+		if len(r) > inner {
+			body = string(r[:inner-2]) + ".."
+		} else if len(r) < inner {
+			body += strings.Repeat(" ", inner-len(r))
+		}
+		b.WriteString("  ║" + body + "║\n")
+	}
+	top := "  ╔" + strings.Repeat("═", inner) + "╗\n"
+	mid := "  ╠" + strings.Repeat("═", inner) + "╣\n"
+	bot := "  ╚" + strings.Repeat("═", inner) + "╝\n"
+	title := "Starfleet is running"
+	leftPad := (inner - len(title)) / 2
+
+	b.WriteString("\n" + top)
+	b.WriteString("  ║" + strings.Repeat(" ", leftPad) + title +
+		strings.Repeat(" ", inner-leftPad-len(title)) + "║\n")
+	b.WriteString(mid)
+	row("API:", fmt.Sprintf("http://%s:%d", cfg.Server.Host, cfg.Server.Port))
+	row("Config:", cfgPath)
+	row("Processes:", fmt.Sprintf("%d loaded", len(cfg.Processes)))
+	row("Schedules:", fmt.Sprintf("%d loaded", len(cfg.Schedules)))
+	row("Mode:", "foreground")
+	row("TUI:", "starfleet tui")
+	row("Status:", "starfleet status")
+	row("Reload:", "SIGHUP or POST /config/reload")
+	row("Stop:", "Ctrl+C (SIGTERM)")
+	b.WriteString(bot + "\n")
+
+	fmt.Print(b.String())
 }
