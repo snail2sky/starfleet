@@ -30,13 +30,15 @@ dashboard, a keyboard-driven TUI, and a CLI that scripts well.
 - Execution history with exit codes, duration and captured output
 
 **Interfaces**
-- Web dashboard (Vue 3, embedded in the binary) — dark UI, auto-refresh
+- Web dashboard (Vue 3, embedded in the binary) — dark UI, auto-refresh,
+  login gate when `server.auth` is enabled
 - TUI (bubbletea) with the same columns and keyboard shortcuts
-- CLI for servers and scripts
+- CLI for servers and scripts (auth credentials from config, flags or env)
 - Real-time log streaming over WebSocket, plus polling fallbacks
 
 **Operations**
-- Hot reload of the whole configuration (file watcher, API, or `SIGHUP`)
+- Hot reload of the whole configuration (file watcher, API, or `SIGHUP`) —
+  auth changes apply live, un-reloadable fields warn that a restart is needed
 - Split configuration: main file + `conf_dir` / `conf.d` / `includes`
 - Webhook notifications on process and schedule events
 - Optional web UI (`server.web.enabled: false`) for headless deployments
@@ -51,7 +53,7 @@ darwin/arm64** are attached to every [release](https://github.com/snail2sky/star
 together with `checksums.txt`.
 
 ```bash
-VER=v1.0.1
+VER=v1.1.0
 curl -sL -o starfleet.tar.gz \
   "https://github.com/snail2sky/starfleet/releases/download/${VER}/starfleet_${VER}_linux_amd64.tar.gz"
 echo "<sha256 from checksums.txt>" | sha256sum -c
@@ -60,7 +62,7 @@ sudo install -m 755 starfleet_${VER}_linux_amd64/starfleet /usr/local/bin/
 starfleet version
 ```
 
-Build from source instead (Go 1.23+, Node 20+):
+Build from source instead (Go 1.24+, Node 20+):
 
 ```bash
 git clone https://github.com/snail2sky/starfleet.git
@@ -141,7 +143,8 @@ server:
   auth:
     enabled: true
     username: admin
-    password: "$2a$10$..."
+    password: "your-password"   # plain text; WebUI shows a login page
+    secret: "at-least-32-chars-random-string"
   web:
     enabled: true           # false = headless (API + TUI only)
 
@@ -190,8 +193,10 @@ know which file to edit:
 
 ## API
 
-All endpoints live under `/api/v1`. Optional Basic auth via
-`server.auth`.
+All endpoints live under `/api/v1`. Optional auth via `server.auth`: the
+API accepts **HTTP Basic** or a **Bearer JWT** issued by
+`POST /api/v1/auth/login` (what the WebUI login page uses). CLI commands
+read the same credentials from the config file.
 
 ### Processes
 
@@ -239,6 +244,7 @@ between them costs nothing.
 | Starfleet's own logs | Logs page (default source) | `0` |
 | Start / Stop / Restart | row buttons | `s` / `t` / `r` |
 | Toggle boot start | Boot switch | `e` |
+| Change autorestart | Autorestart cell (click to cycle) | `R` |
 | Trigger a schedule | Run now | `r` (Schedules tab) |
 | Enable/disable schedule | Enabled switch | `e` (Schedules tab) |
 | Execution history | History | `h` (Schedules tab) |

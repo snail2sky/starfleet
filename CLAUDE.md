@@ -3,10 +3,10 @@
 ## Overview
 Starfleet is a process management and scheduling platform (Go backend, Vue 3
 frontend): a supervisord replacement with a web dashboard, a TUI, a CLI, real-time
-logs, health checks and hot reload. Current release: **v1.0.1**.
+logs, health checks and hot reload. Current release: **v1.1.0**.
 
 ## Tech Stack
-- **Backend**: Go 1.23+, Gin, robfig/cron/v3, gopsutil/v4, coder/websocket,
+- **Backend**: Go 1.24+, Gin, robfig/cron/v3, gopsutil/v4, coder/websocket,
   google/shlex, spf13/cobra
 - **Frontend**: Vue 3 + `<script setup>`, Vite, Pinia, Vue Router, Element Plus
 - **Terminal UI**: bubbletea / bubbles / lipgloss
@@ -46,9 +46,15 @@ make run        # build + run with configs/starfleet.yml
   `internal/api/dist/.gitkeep` so fresh clones compile)
 - Cache policy: index.html `no-store`, hashed `/assets/*` `immutable`
 - Config hot reload: fingerprint of all loaded files; reloads **both**
-  processes and schedules
-- Enable/disable writes the single scalar back to the defining config file
-  (yaml.Node round-trip keeps comments)
+  processes and schedules; `server.auth` hot-applies via `middleware.AuthState`
+  (atomic), `GET /config` reads disk fresh, un-reloadable server fields
+  (host/port/web/logging/notifications) log a `WARN ... require a restart`
+- Auth: `server.auth` guards `/api/v1` with Basic **or** Bearer JWT
+  (`POST /api/v1/auth/login`, WebUI login page); `/health` reports the
+  `auth` flag unauthenticated; CLI/TUI creds: `--user/--password` >
+  `$STARFLEET_USER/$STARFLEET_PASSWORD` > config `auth.*`
+- Enable/disable and autorestart policy changes write the single value back
+  to the defining config file (yaml.Node round-trip keeps comments)
 - Stable ordering everywhere (never iterate maps for display lists)
 
 ## Testing
@@ -65,4 +71,4 @@ go test ./internal/scheduler/ -v    # cron + enable/disable
   add client method in `internal/client/client.go`
 - New TUI feature: keys in `internal/tui/model.go`, keep the web UI in parity
   (README parity table)
-- Release: tag `v1.0.2` etc. — `release.yml` builds the matrix
+- Release: tag `v1.1.1` etc. — `release.yml` builds the matrix

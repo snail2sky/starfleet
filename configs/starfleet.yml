@@ -20,7 +20,7 @@ server:
   auth:
     enabled: false
     # username: admin
-    # password: "your-password"  # Use: htpasswd -nbBC 10 "" "your-password" | cut -d: -f2
+    # password: "your-password"  # plain text (constant-time compare), NOT bcrypt
     # secret: "your-jwt-secret-at-least-32-chars"
 
 # Process definitions
