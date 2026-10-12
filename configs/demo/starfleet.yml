@@ -1,0 +1,37 @@
+# ─── Starfleet demo — main config ────────────────────────────────
+# A complete, runnable example. Unpack any release tarball, then:
+#
+#   starfleet serve -c examples/demo/starfleet.yml
+#
+# In another terminal:
+#   starfleet -c examples/demo/starfleet.yml status
+#   starfleet -c examples/demo/starfleet.yml logs -f
+#
+# Full reference: docs/configuration.md
+
+# Processes and schedules are loaded from ./conf.d/*.yml (relative to
+# THIS file). Keep one process per file — that is the intended layout.
+conf_dir: conf.d
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  auth:
+    # The WebUI shows a login page; API/CLI/TUI send the same credentials.
+    enabled: true
+    username: admin
+    password: "demo-password"        # plain text — change it!
+    # secret: "at-least-32-random-chars"   # optional: leave empty and a
+    # random JWT secret is generated at startup (set one if you want
+    # WebUI sessions to survive a restart)
+
+logging:
+  level: info        # debug | info | warn | error
+  format: json       # json | text
+  output: stdout
+
+notifications:
+  webhook:
+    enabled: false   # flip on and set url to receive process events
+    # url: "https://hooks.example.com/starfleet"
+    # events: [process_fatal, health_check_fail]

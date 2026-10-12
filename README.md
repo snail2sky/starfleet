@@ -93,6 +93,8 @@ starfleet serve -c /etc/starfleet/starfleet.yml
 ```
 
 Open <http://server:8080> for the dashboard, or `starfleet tui` on the box.
+Every release tarball also ships a **runnable demo** under `examples/demo/`
+(main config + a managed process + a cron schedule) — see its README.
 
 ### The `stf` shortcut
 

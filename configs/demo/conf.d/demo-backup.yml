@@ -1,0 +1,13 @@
+# ─── Demo schedule: a cron job you can watch fire ────────────────
+# Schedules live in the same conf.d/ files (or in the main config).
+# This one logs a timestamp every 2 minutes — swap the command for a
+# real backup/cleanup script and adjust the cron.
+schedules:
+  demo-backup:
+    cron: "*/2 * * * *"        # standard 5-field cron (or "@every 2m")
+    command: "echo \"backup ran at $(date)\" >> /tmp/starfleet-demo-backup.log"
+    type: exec                 # "exec" (run a shell command) | "http"
+    timeout: 30s               # kill the job if it runs longer
+    enabled: true              # can be toggled from WebUI/TUI/API
+    labels:
+      demo: "true"

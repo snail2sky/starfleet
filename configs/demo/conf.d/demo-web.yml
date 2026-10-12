@@ -1,0 +1,28 @@
+# ─── Demo process #1: a tiny web server you can actually manage ──
+# One process per file. Starfleet loads every *.yml in conf.d/.
+#
+# After starfleet starts, http://<host>:9080 serves /tmp — open it,
+# then try in the WebUI/TUI: start · stop · restart · toggle BOOT ·
+# cycle the autorestart policy (true → unexpected → false).
+processes:
+  demo-web:
+    command: "python3 -m http.server 9080 --bind 0.0.0.0"
+    directory: "/tmp"          # static files served from here (harmless)
+    autostart: true            # start together with starfleet
+    autorestart: "true"        # "true"=always  "unexpected"=only on bad
+                               # exit code (default)  "false"=never
+    startsecs: 2               # must stay up 2s to count as started
+    startretries: 3            # failed starts before FATAL
+    stopsignal: SIGTERM
+    stopwaitsecs: 10           # grace period before SIGKILL
+    stdout:                    # captured + rotated like supervisord
+      path: "/tmp/starfleet-demo-web.stdout.log"
+      maxbytes: "10M"
+      backups: 2
+    stderr:
+      path: "/tmp/starfleet-demo-web.stderr.log"
+      maxbytes: "10M"
+      backups: 2
+    labels:                    # free-form metadata, shown in the UIs
+      demo: "true"
+      group: web

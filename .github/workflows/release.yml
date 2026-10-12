@@ -57,6 +57,7 @@ jobs:
             -o "starfleet_${GITHUB_REF_NAME}_${GOOS}_${ARCH}/starfleet" \
             ./cmd/starfleet/
           cp README.md LICENSE "starfleet_${GITHUB_REF_NAME}_${GOOS}_${ARCH}/"
+          cp -r configs "starfleet_${GITHUB_REF_NAME}_${GOOS}_${ARCH}/examples"
           tar -czf "starfleet_${GITHUB_REF_NAME}_${GOOS}_${ARCH}.tar.gz" "starfleet_${GITHUB_REF_NAME}_${GOOS}_${ARCH}"
       - name: Smoke test (native target)
         if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
@@ -65,6 +66,7 @@ jobs:
           ./sf version
           ./sf --help | head -5
           ./sf validate -c configs/starfleet.yml
+          ./sf validate -c configs/demo/starfleet.yml
       - uses: actions/upload-artifact@v4
         with:
           name: starfleet-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm && format('-v{0}', matrix.goarm) || '' }}
