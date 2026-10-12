@@ -95,9 +95,11 @@ func NewModel(manager Manager) Model {
 	schedCols := []table.Column{
 		{Title: "NAME", Width: 18},
 		{Title: "CRON", Width: 14},
+		{Title: "TYPE", Width: 6},
 		{Title: "ENABLED", Width: 8},
 		{Title: "NEXT RUN", Width: 20},
-		{Title: "COMMAND / URL", Width: 40},
+		{Title: "TIMEOUT", Width: 10},
+		{Title: "COMMAND / URL", Width: 30},
 	}
 	st := table.New(
 		table.WithColumns(schedCols),
@@ -732,6 +734,10 @@ func (m *Model) refreshSchedules() {
 		if cmdOrURL == "" {
 			cmdOrURL = j.URL
 		}
+		jobType := j.Type
+		if jobType == "" {
+			jobType = "exec"
+		}
 		next := j.NextRun
 		if next == "" {
 			next = "—"
@@ -739,9 +745,11 @@ func (m *Model) refreshSchedules() {
 		rows = append(rows, table.Row{
 			j.Name,
 			j.Cron,
+			jobType,
 			fmt.Sprintf("%t", j.Enabled),
 			next,
-			truncate(cmdOrURL, 30),
+			j.Timeout,
+			truncate(cmdOrURL, 28),
 		})
 	}
 	if rowsEqual(m.lastSchedRows, rows) {

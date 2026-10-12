@@ -15,25 +15,20 @@
             <span class="cell-name">{{ row.name }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="Schedule" width="150">
+        <el-table-column label="Schedule" width="140">
           <template #default="{ row }">
             <code class="cell-cron">{{ row.cron }}</code>
           </template>
         </el-table-column>
-        <el-table-column label="Type" width="90">
+        <el-table-column label="Type" width="80">
           <template #default="{ row }">
             <span class="type-chip">{{ row.type || 'exec' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="Command" min-width="240" show-overflow-tooltip>
-          <template #default="{ row }">
-            <code class="cell-cmd">{{ row.command || row.url }}</code>
-          </template>
-        </el-table-column>
-        <el-table-column label="Status" width="100">
+        <el-table-column label="Enabled" width="100">
           <template #default="{ row }">
             <span class="badge" :class="row.enabled ? 'badge--running' : 'badge--idle'">
-              {{ row.enabled ? 'ENABLED' : 'PAUSED' }}
+              {{ row.enabled ? 'ON' : 'OFF' }}
             </span>
           </template>
         </el-table-column>
@@ -45,6 +40,11 @@
         <el-table-column label="Timeout" width="95">
           <template #default="{ row }">
             <span class="tnum">{{ row.timeout }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Command" min-width="220" show-overflow-tooltip>
+          <template #default="{ row }">
+            <code class="cell-cmd">{{ row.command || row.url }}</code>
           </template>
         </el-table-column>
         <el-table-column label="Actions" width="210" fixed="right">

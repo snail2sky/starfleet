@@ -150,6 +150,29 @@ notifications:
 | `/api/v1/ws/logs` | Real-time log stream |
 | `/api/v1/ws/events` | Real-time event stream |
 
+## Web UI ↔ TUI parity
+
+Both interfaces show the same data in the same column order, so switching
+between them costs nothing.
+
+| | Web UI | TUI |
+|---|--------|-----|
+| Process columns | Name · State · Boot · PID · Uptime · Retries · Autorestart · Command | same |
+| Schedule columns | Job · Schedule · Type · Enabled · Next run · Timeout · Command | same |
+| Full process details | click row → dialog (Details / Logs tabs) | `Enter` |
+| Process logs | Logs button / tab | `l` |
+| Starfleet's own logs | Logs page (default source) | `0` |
+| Start / Stop / Restart | row buttons | `s` / `t` / `r` |
+| Toggle boot start | Boot column switch | `e` |
+| Trigger a schedule | Run now | `r` in Schedules tab |
+| Execution history | History button | — |
+| System overview | Overview page | — |
+| Config editor / status | Settings page | — |
+
+`Boot` = starts automatically with starfleet (`autostart` in config);
+`Autorestart` = restart policy when the process exits (`true` / `false` /
+`unexpected`).
+
 ## Development
 
 ```bash

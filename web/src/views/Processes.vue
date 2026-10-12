@@ -37,17 +37,7 @@
             <span class="badge" :class="badgeClass(row.state)">{{ row.state }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="PID" width="80">
-          <template #default="{ row }">
-            <span class="tnum">{{ row.pid || '—' }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="Uptime" width="140">
-          <template #default="{ row }">
-            <span class="tnum">{{ fmtUptime(row) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="Autostart" width="105">
+        <el-table-column label="Boot" width="100">
           <template #default="{ row }">
             <button
               class="toggle"
@@ -61,9 +51,24 @@
             </button>
           </template>
         </el-table-column>
+        <el-table-column label="PID" width="80">
+          <template #default="{ row }">
+            <span class="tnum">{{ row.pid || '—' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Uptime" width="130">
+          <template #default="{ row }">
+            <span class="tnum">{{ fmtUptime(row) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="Retries" width="85">
           <template #default="{ row }">
             <span class="tnum">{{ row.retry_count }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Autorestart" width="120">
+          <template #default="{ row }">
+            <code class="cell-cmd">{{ row.autorestart }}</code>
           </template>
         </el-table-column>
         <el-table-column label="Command" min-width="220" show-overflow-tooltip>
@@ -152,9 +157,20 @@ function dotClass(state: string) {
   if (state === 'BACKOFF' || state === 'STARTING' || state === 'STOPPING') return 'is-warn'
   return 'is-idle'
 }
+/** Coarse uptime buckets, matching the TUI (5s / minute / hour). */
 function fmtUptime(p: ProcessInfo) {
-  if (p.state !== 'RUNNING' || p.uptime === '0s') return '—'
-  return p.uptime.replace(/\.\d+s$/, 's')
+  if (p.state !== 'RUNNING' || !p.uptime || p.uptime === '0s') return '—'
+  // p.uptime is a Go duration string, e.g. "2h15m30.123456789s"
+  const m = p.uptime.match(
+    /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s)?$/,
+  )
+  if (!m) return p.uptime
+  const h = parseInt(m[1] || '0', 10)
+  const min = parseInt(m[2] || '0', 10)
+  const sec = parseFloat(m[3] || '0')
+  if (h > 0) return `${h}h${String(min).padStart(2, '0')}m`
+  if (min > 0 || sec >= 60) return `${min}m`
+  return `${Math.floor(sec / 5) * 5}s`
 }
 
 async function act(name: string, action: 'start' | 'stop' | 'restart') {
