@@ -178,3 +178,38 @@ func TestSystemOverview(t *testing.T) {
 		t.Error("expected memory in response")
 	}
 }
+
+// TestHealthVersionVisibility: the build version must appear on the
+// authenticated health endpoint (WebUI sidebar) but NOT on the public
+// probe (no unauthenticated fingerprinting).
+func TestHealthVersionVisibility(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	SetVersion("9.9.9-test")
+	defer SetVersion("dev")
+
+	state := middleware.NewAuthState(middleware.AuthConfig{Enabled: false})
+	h := NewSystemHandler(state)
+	r := gin.New()
+	r.GET("/health", h.Health)
+	r.GET("/api/v1/system/health", h.HealthDetailed)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/health", nil))
+	var pub map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &pub); err != nil {
+		t.Fatalf("public health json: %v", err)
+	}
+	if _, dup := pub["version"]; dup {
+		t.Errorf("public /health must not leak version: %v", pub)
+	}
+
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/system/health", nil))
+	var det map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &det); err != nil {
+		t.Fatalf("detailed health json: %v", err)
+	}
+	if det["version"] != "9.9.9-test" {
+		t.Errorf("expected version in detailed health, got %v", det["version"])
+	}
+}

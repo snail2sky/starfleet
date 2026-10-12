@@ -27,7 +27,7 @@
           <span class="health__dot"></span>
           {{ serverUp ? 'Server online' : 'Server unreachable' }}
         </div>
-        <div class="sidebar__ver">starfleet v{{ version }}</div>
+        <div class="sidebar__ver">starfleet {{ version || '…' }}</div>
       </div>
     </aside>
 
@@ -44,7 +44,7 @@ import { getHealth } from '@/api'
 
 const route = useRoute()
 const serverUp = ref(true)
-const version = ref('1.0')
+const version = ref('')
 const isLogin = computed(() => route.name === 'login')
 
 const nav = [
@@ -85,8 +85,9 @@ onMounted(() => {
   const ping = async () => {
     if (isLogin.value) return
     try {
-      await getHealth()
+      const { data } = await getHealth()
       serverUp.value = true
+      if (data?.version) version.value = data.version
     } catch {
       serverUp.value = false
     }

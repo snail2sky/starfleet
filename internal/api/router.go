@@ -98,7 +98,7 @@ func NewRouter(mgr *engine.Manager, sched *scheduler.Scheduler, hub *ws.Hub, cfg
 		sys := v1.Group("/system")
 		{
 			sys.GET("/overview", systemH.Overview)
-			sys.GET("/health", systemH.Health)
+			sys.GET("/health", systemH.HealthDetailed)
 		}
 
 		// WebSocket endpoints.

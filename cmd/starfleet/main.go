@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/snail2sky/starfleet/internal/api"
+	"github.com/snail2sky/starfleet/internal/api/handler"
 	"github.com/snail2sky/starfleet/internal/api/middleware"
 	"github.com/snail2sky/starfleet/internal/api/ws"
 	"github.com/snail2sky/starfleet/internal/config"
@@ -208,6 +209,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	setupLogger(logPath)
 
 	slog.Info("starfleet starting", "version", version, "config", cfgPath, "mode", modeName(false, daemonMode))
+	handler.SetVersion(version)
 
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
@@ -382,6 +384,7 @@ func runTUI(cmd *cobra.Command, args []string) error {
 	if err := resolveConfigFlag(); err != nil {
 		return err
 	}
+	tui.SetVersion(version)
 	setupLogger(resolveLogPath(true))
 	slog.Info("starfleet starting", "version", version, "config", cfgPath, "mode", "tui")
 
@@ -580,6 +583,7 @@ func printBanner(cfg *config.Config) {
 	b.WriteString("  ║" + strings.Repeat(" ", leftPad) + title +
 		strings.Repeat(" ", inner-leftPad-len(title)) + "║\n")
 	b.WriteString(mid)
+	row("Version:", version)
 	row("API:", fmt.Sprintf("http://%s:%d", cfg.Server.Host, cfg.Server.Port))
 	row("Config:", cfgPath)
 	row("Processes:", fmt.Sprintf("%d loaded", len(cfg.Processes)))

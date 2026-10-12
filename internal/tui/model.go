@@ -64,6 +64,17 @@ type Model struct {
 
 var tabs = []string{"Processes", "Schedules", "Help"}
 
+// version is the build version shown in the header; set from main via
+// SetVersion (ldflags carry the real value).
+var version = "dev"
+
+// SetVersion records the build version for display.
+func SetVersion(v string) {
+	if v != "" {
+		version = v
+	}
+}
+
 // procCols defines the process table columns.
 // BOOT = starts automatically when starfleet starts (autostart);
 // AUTORESTART = restart policy when the process exits.
@@ -463,7 +474,9 @@ func (m Model) View() string {
 		modeBadge = SuccessStyle.Render("[connected to server]")
 	}
 	title := lipgloss.JoinHorizontal(lipgloss.Center,
-		TitleStyle.Render("🚀 Starfleet"), " ", modeBadge)
+		TitleStyle.Render("🚀 Starfleet"),
+		" ", MutedStyle.Render(version),
+		" ", modeBadge)
 	tabsRow := m.renderTabs()
 	header := lipgloss.JoinHorizontal(lipgloss.Center, title, "  ", tabsRow)
 
@@ -756,8 +769,8 @@ func (m Model) viewSchedHistory() string {
 
 // Help view.
 func (m Model) viewHelp() string {
-	help := `
-  Keyboard Shortcuts
+	help := fmt.Sprintf(`
+  Starfleet %s — Keyboard Shortcuts
 
   Navigation
     ↑/k, ↓/j        Move cursor up/down
@@ -787,7 +800,7 @@ func (m Model) viewHelp() string {
 
   General
     q / Ctrl+C       Quit
-`
+`, version)
 	return InfoBoxStyle.Render(help)
 }
 
