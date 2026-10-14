@@ -34,9 +34,14 @@ logs, health checks and hot reload. Current release: **v1.1.0**.
 make            # frontend + binary into bin/
 make frontend   # build web → internal/api/dist
 make test       # go test ./... -race
-make lint
+make lint       # golangci-lint (SAME v1.64.8 as CI — ALWAYS run before push)
+make lint-install  # one-time: install the pinned golangci-lint
 make run        # build + run with configs/starfleet.yml
 ```
+**Before pushing, run `make test && make lint`.** CI runs the identical
+lint version (pinned in ci.yml + .golangci.yml); catching findings locally
+saves a CI round-trip. If `~/go/bin/golangci-lint` is missing, run
+`make lint-install` once (GOPROXY=https://goproxy.cn,direct on restricted networks).
 
 ## Key Design Decisions
 - Process state machine: STOPPED → STARTING → RUNNING → STOPPING → FATAL/BACKOFF/EXITED

@@ -1,0 +1,7 @@
+# golangci-lint configuration — keep in sync with .github/workflows/ci.yml
+# (the CI action pins the same version: v1.64.8).
+#
+# The timeout is generous because modernc.org/sqlite makes package
+# loading slow on first run; later runs hit the build cache and are fast.
+run:
+  timeout: 10m

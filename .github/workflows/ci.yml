@@ -39,7 +39,9 @@ jobs:
           go-version: '1.24'
       - uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          # Pinned to match local development (see Makefile `lint` target
+          # and .golangci.yml) so lint results are identical everywhere.
+          version: v1.64.8
 
   go-test:
     needs: detect-changes

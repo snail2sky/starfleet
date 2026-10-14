@@ -1,4 +1,4 @@
-.PHONY: all build test lint clean frontend dev run
+.PHONY: all build test lint lint-install clean frontend dev run
 
 VERSION ?= dev
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
@@ -26,8 +26,14 @@ test-coverage:
 	go test ./... -race -coverprofile=coverage.out
 	go tool cover -html=coverage.out -o coverage.html
 
+# Use the first golangci-lint found: PATH, then the default go install dir.
+GOLANGCI ?= $(shell command -v golangci-lint 2>/dev/null || echo "$(HOME)/go/bin/golangci-lint")
+
 lint:
-	golangci-lint run ./...
+	$(GOLANGCI) run ./...
+
+lint-install:
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
 
 clean:
 	rm -rf bin/ web/dist/ internal/api/dist/ coverage.out coverage.html
