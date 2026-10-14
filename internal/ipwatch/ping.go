@@ -115,7 +115,7 @@ func hostCount(prefix int) int { return 1 << (32 - prefix) }
 // incIP returns base+i as dotted quad.
 func incIP(base string, i int) string {
 	var a, b, c, d int
-	fmt.Sscanf(base, "%d.%d.%d.%d", &a, &b, &c, &d)
+	_, _ = fmt.Sscanf(base, "%d.%d.%d.%d", &a, &b, &c, &d)
 	v := uint32(a)<<24 | uint32(b)<<16 | uint32(c)<<8 | uint32(d)
 	v += uint32(i)
 	return fmt.Sprintf("%d.%d.%d.%d", v>>24, v>>16&0xff, v>>8&0xff, v&0xff)

@@ -81,7 +81,7 @@ func (t *Tracker) Round(ctx context.Context, now time.Time, alive []PingResult, 
 	}
 	stmt, err := tx.Prepare(`INSERT INTO sightings (ts, ip, mac, source, rtt_ms) VALUES (?, ?, ?, ?, ?)`)
 	if err != nil {
-		tx.Rollback()
+		_ = tx.Rollback()
 		return err
 	}
 	pingAlive := map[string]bool{}
@@ -100,7 +100,7 @@ func (t *Tracker) Round(ctx context.Context, now time.Time, alive []PingResult, 
 			}
 		}
 		if _, err := stmt.Exec(ts, ip, nullStr(macs[ip]), source, rtt); err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return err
 		}
 	}
@@ -113,12 +113,12 @@ func (t *Tracker) Round(ctx context.Context, now time.Time, alive []PingResult, 
 		  mac = COALESCE(excluded.mac, devices.mac),
 		  last_seen = excluded.last_seen`)
 	if err != nil {
-		tx.Rollback()
+		_ = tx.Rollback()
 		return err
 	}
 	for ip := range seen {
 		if _, err := devStmt.Exec(ip, nullStr(macs[ip]), ts, ts); err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return err
 		}
 	}
@@ -133,7 +133,7 @@ func (t *Tracker) Round(ctx context.Context, now time.Time, alive []PingResult, 
 			// open transaction owns it (db.Exec here would deadlock).
 			if mac, ok := macs[ip]; ok {
 				if _, err := tx.Exec(`UPDATE presence SET mac = ? WHERE id = ?`, mac, t.open[ip]); err != nil {
-					tx.Rollback()
+					_ = tx.Rollback()
 					return err
 				}
 			}
@@ -142,7 +142,7 @@ func (t *Tracker) Round(ctx context.Context, now time.Time, alive []PingResult, 
 		res, err := tx.Exec(`INSERT INTO presence (ip, mac, online_at) VALUES (?, ?, ?)`,
 			ip, nullStr(macs[ip]), ts)
 		if err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return err
 		}
 		id, _ := res.LastInsertId()
@@ -160,7 +160,7 @@ func (t *Tracker) Round(ctx context.Context, now time.Time, alive []PingResult, 
 		if t.misses[ip] >= t.offlineAfter {
 			if _, err := tx.Exec(`UPDATE presence SET offline_at = ? WHERE id = ? AND offline_at IS NULL`,
 				ts, t.open[ip]); err != nil {
-				tx.Rollback()
+				_ = tx.Rollback()
 				return err
 			}
 			slog.Info("device offline", "ip", ip, "misses", t.misses[ip])
