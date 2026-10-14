@@ -244,3 +244,14 @@ func decode(resp *http.Response, v interface{}) error {
 	}
 	return nil
 }
+
+// ScheduleDaily returns today's execution summary across all schedules.
+func (c *Client) ScheduleDaily() (*scheduler.DailyReport, error) {
+	var out struct {
+		Data scheduler.DailyReport `json:"data"`
+	}
+	if err := c.get("/api/v1/schedules/daily", &out); err != nil {
+		return nil, err
+	}
+	return &out.Data, nil
+}

@@ -87,6 +87,7 @@ func NewRouter(mgr *engine.Manager, sched *scheduler.Scheduler, hub *ws.Hub, cfg
 		schedules := v1.Group("/schedules")
 		{
 			schedules.GET("", scheduleH.List)
+			schedules.GET("/daily", scheduleH.Daily)
 			schedules.GET("/:name", scheduleH.Get)
 			schedules.POST("/:name/run", scheduleH.Run)
 			schedules.GET("/:name/history", scheduleH.History)

@@ -100,3 +100,9 @@ func (h *ScheduleHandler) History(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"data": entries})
 }
+
+// Daily returns today's execution summary across all schedules.
+// GET /api/v1/schedules/daily
+func (h *ScheduleHandler) Daily(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"data": h.scheduler.Daily()})
+}

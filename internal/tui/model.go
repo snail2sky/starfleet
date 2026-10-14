@@ -23,6 +23,7 @@ const (
 	ViewDetail
 	ViewLogs
 	ViewSchedHistory
+	ViewSchedDaily
 )
 
 // Model is the main TUI model.
@@ -55,6 +56,7 @@ type Model struct {
 	schedTable    table.Model
 	schedHistName string
 	schedHist     []scheduler.HistoryEntry
+	schedDaily    scheduler.DailyReport
 
 	// Common
 	spinner  spinner.Model
@@ -167,6 +169,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.viewMode == ViewSchedHistory && m.schedHistName != "" {
 			m.schedHist = m.manager.ScheduleHistory(m.schedHistName, 50)
 		}
+		if m.viewMode == ViewSchedDaily {
+			m.schedDaily = m.manager.ScheduleDaily()
+		}
 		if m.msgTimer > 0 {
 			m.msgTimer--
 			if m.msgTimer == 0 {
@@ -255,6 +260,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case ViewLogs:
 		return m.handleLogKey(msg)
 	case ViewSchedHistory:
+		switch {
+		case key.Matches(msg, key.NewBinding(key.WithKeys("esc", "backspace", "q"))):
+			m.viewMode = ViewList
+		}
+		return m, nil
+	case ViewSchedDaily:
 		switch {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("esc", "backspace", "q"))):
 			m.viewMode = ViewList
@@ -400,6 +411,11 @@ func (m Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.schedHist = m.manager.ScheduleHistory(row[0], 50)
 				m.viewMode = ViewSchedHistory
 			}
+
+		case key.Matches(msg, key.NewBinding(key.WithKeys("d"))):
+			// Daily overview: today's runs across all schedules.
+			m.schedDaily = m.manager.ScheduleDaily()
+			m.viewMode = ViewSchedDaily
 		}
 	}
 	return m, nil
@@ -466,6 +482,8 @@ func (m Model) View() string {
 		return m.viewLogs()
 	case ViewSchedHistory:
 		return m.viewSchedHistory()
+	case ViewSchedDaily:
+		return m.viewSchedDaily()
 	}
 
 	// List view.
@@ -528,7 +546,7 @@ func (m Model) renderStatusBar() string {
 	case 0:
 		left = HelpStyle.Render("↑↓ move  ←→ tabs  Enter detail  l logs  0 srv logs  s start  t stop  r restart  e boot  R autorestart  q quit")
 	case 1:
-		left = HelpStyle.Render("↑↓ move  r run  e enable/disable  h history  ←→ tabs  q quit")
+		left = HelpStyle.Render("↑↓ move  r run  e enable/disable  h history  d daily  ←→ tabs  q quit")
 	default:
 		left = HelpStyle.Render("q quit")
 	}
@@ -767,6 +785,78 @@ func (m Model) viewSchedHistory() string {
 	return pinFooter(main, footer, m.height)
 }
 
+// viewSchedDaily renders today's cross-job execution summary.
+func (m Model) viewSchedDaily() string {
+	d := m.schedDaily
+	title := TitleStyle.Render(fmt.Sprintf("📅 Daily — %s", d.Date))
+	meta := MutedStyle.Render(fmt.Sprintf("  %d runs · %d ok · %d failed · auto-refresh 1s",
+		d.Total, d.OK, d.Failed))
+
+	okStyle := lipgloss.NewStyle().Foreground(Success)
+	badStyle := lipgloss.NewStyle().Foreground(Error)
+	tsStyle := lipgloss.NewStyle().Foreground(Subtle)
+
+	maxLines := m.height - 13
+	if maxLines < 3 {
+		maxLines = 3
+	}
+
+	var body string
+	if d.Total == 0 {
+		body = HelpStyle.Render("  No runs recorded today — press r on the Schedules tab to trigger one.")
+	} else {
+		var sb strings.Builder
+		sb.WriteString(BoldStyle.Render("  ── Jobs today ──") + "\n")
+		for _, j := range d.Jobs {
+			sb.WriteString(fmt.Sprintf("  %-20s %4d runs  ", j.Name, j.Runs))
+			if j.Failed > 0 {
+				sb.WriteString(badStyle.Render(fmt.Sprintf("%d failed", j.Failed)))
+			} else {
+				sb.WriteString(okStyle.Render("all ok"))
+			}
+			if !j.LastStart.IsZero() {
+				res := "exit=0"
+				if j.LastExit != 0 || j.LastError != "" {
+					res = badStyle.Render(fmt.Sprintf("exit=%d", j.LastExit))
+				}
+				sb.WriteString(tsStyle.Render(fmt.Sprintf("  last %s · %s",
+					j.LastStart.Format("15:04"), j.LastDuration.Round(time.Millisecond))))
+				sb.WriteString(" " + res)
+			}
+			sb.WriteString("\n")
+		}
+
+		// Recent runs: keep at least 3 rows for the list section.
+		recentCap := maxLines - len(d.Jobs) - 5
+		if recentCap < 3 {
+			recentCap = 3
+		}
+		sb.WriteString("\n" + BoldStyle.Render("  ── Recent runs ──") + "\n")
+		shown := 0
+		for _, e := range d.Recent {
+			if shown >= recentCap {
+				break
+			}
+			status := okStyle.Render("OK     ")
+			if e.Failed() {
+				status = badStyle.Render("FAILED ")
+			}
+			sb.WriteString(tsStyle.Render(e.StartTime.Format("15:04:05")) + " " + status)
+			sb.WriteString(fmt.Sprintf("%-20s %s", e.Name, e.Duration.Round(time.Millisecond)))
+			if e.Error != "" {
+				sb.WriteString("  " + badStyle.Render(truncate(e.Error, 40)))
+			}
+			sb.WriteString("\n")
+			shown++
+		}
+		body = lipgloss.NewStyle().Padding(0, 2).Render(strings.TrimRight(sb.String(), "\n"))
+	}
+
+	footer := HelpStyle.Render("  Esc/backspace: back  (auto-refreshes 1s)")
+	main := lipgloss.JoinVertical(lipgloss.Left, title+meta, "", body)
+	return pinFooter(main, footer, m.height)
+}
+
 // Help view.
 func (m Model) viewHelp() string {
 	help := fmt.Sprintf(`
@@ -790,6 +880,7 @@ func (m Model) viewHelp() string {
     r                Trigger the selected job immediately
     e                Enable/disable the selected job (persisted)
     h                Show execution history of the selected job
+    d                Daily overview: today's runs across all jobs
 
   Detail / Log View
     Esc/backspace    Back to list

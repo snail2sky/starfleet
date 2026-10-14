@@ -254,6 +254,12 @@ schedules:
 执行历史通过 `starfleet schedules` / WebUI Schedules 页 / `GET /api/v1/schedules/:name/history` 查看，
 手动触发：`starfleet run <name>`。
 
+**今日执行概况（日常查看）**：WebUI Schedules 页顶部的 Today 面板与 Today 列、
+TUI Schedules 页按 `d`、或 `GET /api/v1/schedules/daily`——按任务汇总当天的
+运行次数/成功/失败与最近一次结果，并列出当天最新执行明细。
+历史仅存于内存（每个任务最多 1000 条），重启后清零，因此"今日"统计覆盖
+自本次 starfleet 启动以来的当天记录。
+
 ---
 
 ## 5. logging — starfleet 自身日志

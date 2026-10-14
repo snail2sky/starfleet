@@ -250,6 +250,7 @@ between them costs nothing.
 | Trigger a schedule | Run now | `r` (Schedules tab) |
 | Enable/disable schedule | Enabled switch | `e` (Schedules tab) |
 | Execution history | History | `h` (Schedules tab) |
+| Today's runs (daily view) | Today panel + column | `d` (Schedules tab) |
 | System overview | Overview page | — |
 | Config status | Settings page | — |
 

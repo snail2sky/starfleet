@@ -185,6 +185,26 @@ export const setScheduleEnabled = (name: string, enabled: boolean) =>
 export const getScheduleHistory = (name: string, limit = 50) =>
   api.get<{ data: HistoryEntry[] }>(`/schedules/${name}/history?limit=${limit}`)
 
+export interface DailyJobStat {
+  name: string
+  runs: number
+  ok: number
+  failed: number
+  last_start: string // RFC3339, zero time when no runs
+  last_exit: number
+  last_error?: string
+  last_duration: number // nanoseconds
+}
+export interface DailyReport {
+  date: string // YYYY-MM-DD (server local)
+  total: number
+  ok: number
+  failed: number
+  jobs: DailyJobStat[]
+  recent: HistoryEntry[] // today, newest first, max 100
+}
+export const getScheduleDaily = () => api.get<{ data: DailyReport }>('/schedules/daily')
+
 // Config API
 export const getConfig = () => api.get('/config')
 export const reloadConfig = () => api.post('/config/reload')

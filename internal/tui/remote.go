@@ -30,6 +30,8 @@ type Manager interface {
 	RunSchedule(name string) error
 	SetScheduleEnabled(name string, enabled bool) error
 	ScheduleHistory(name string, limit int) []scheduler.HistoryEntry
+	// ScheduleDaily returns today's cross-job execution summary.
+	ScheduleDaily() scheduler.DailyReport
 	Mode() string // "local" or "remote"
 }
 
@@ -97,6 +99,14 @@ func (l *LocalManager) ScheduleHistory(name string, limit int) []scheduler.Histo
 		return nil
 	}
 	return l.sched.History(name, limit)
+}
+
+// ScheduleDaily returns today's summary from the local scheduler.
+func (l *LocalManager) ScheduleDaily() scheduler.DailyReport {
+	if l.sched == nil {
+		return scheduler.DailyReport{}
+	}
+	return l.sched.Daily()
 }
 
 // Logs reads captured lines from the in-process log collector.
@@ -171,3 +181,12 @@ func (r *RemoteManager) ScheduleHistory(name string, limit int) []scheduler.Hist
 
 // ProbeServer checks whether a starfleet server is reachable.
 func ProbeServer(baseURL string) bool { return client.Probe(baseURL) }
+
+// ScheduleDaily fetches today's summary from the server.
+func (r *RemoteManager) ScheduleDaily() scheduler.DailyReport {
+	report, err := r.Client.ScheduleDaily()
+	if err != nil || report == nil {
+		return scheduler.DailyReport{}
+	}
+	return *report
+}
