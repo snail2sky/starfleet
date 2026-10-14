@@ -15,6 +15,7 @@ logs, health checks and hot reload. Current release: **v1.1.0**.
 
 ## Project Structure
 - `cmd/starfleet/` — CLI (cobra): main.go (server/TUI/validate/status), control.go (start/stop/restart/reload/logs/run/schedules)
+- `cmd/ipwatch/` — standalone LAN presence tracker: sweeps a /24 (parallel ping + `ip neigh`), records online/offline intervals + raw sightings in SQLite (`internal/ipwatch/`); deployed as a starfleet-managed process
 - `internal/engine/` — process state machine, manager, log collector, file log rotation, health checks
 - `internal/config/` — YAML loading (conf_dir/conf.d/includes), watcher, in-place field persistence (yaml.Node)
 - `internal/scheduler/` — cron jobs, enable/disable, history ring
