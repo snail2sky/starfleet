@@ -8,9 +8,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -29,6 +31,7 @@ func main() {
 		retain       = flag.Duration("retain", 30*24*time.Hour, "raw sightings retention (0 = keep forever)")
 		summary      = flag.Bool("summary", false, "print device inventory and exit")
 		once         = flag.Bool("once", false, "run a single sweep and exit")
+		webAddr      = flag.String("web", ":8095", "dashboard listen address (empty disables the web UI)")
 	)
 	flag.Parse()
 
@@ -102,6 +105,24 @@ func main() {
 	if *once {
 		return
 	}
+
+	// Optional read-only dashboard (embedded single-page UI + JSON API).
+	if *webAddr != "" {
+		srv := &http.Server{Addr: *webAddr, Handler: ipwatch.NewWebHandler(db)}
+		go func() {
+			slog.Info("dashboard listening", "addr", *webAddr)
+			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				slog.Error("dashboard server failed", "error", err)
+			}
+		}()
+		go func() {
+			<-ctx.Done()
+			shCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			_ = srv.Shutdown(shCtx)
+		}()
+	}
+
 	ticker := time.NewTicker(*interval)
 	defer ticker.Stop()
 	day := time.NewTicker(24 * time.Hour)

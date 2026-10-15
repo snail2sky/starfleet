@@ -270,6 +270,11 @@ ipwatch -db ipwatch.db -summary                      # devices + today's episode
 sqlite3 ipwatch.db 'SELECT * FROM presence ORDER BY online_at DESC LIMIT 20'
 ```
 
+It also ships a **read-only web dashboard** (default `:8095`, `-web` to
+change/disable): live online counts, a 24-hour presence timeline per
+device, the device table and a recent UP/DOWN feed — auto-refreshes
+every 5s. Keep it LAN-only (do not port-forward it to the WAN).
+
 Tables: `presence` (ip, online_at → offline_at, mac), `sightings`
 (ts, ip, mac, source, rtt_ms — 30d retention), `devices` (inventory).
 Run it under starfleet for supervision (see `conf.d/ipwatch.yml` style).

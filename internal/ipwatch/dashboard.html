@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ipwatch — LAN presence</title>
+<style>
+:root{color-scheme:dark;--plane:#0d0d0d;--surface:#1a1a19;--surface-2:#222221;--line:#2c2c2a;
+--ink:#fff;--ink-2:#c3c2b7;--ink-3:#898781;--accent:#3987e5;--good:#0ca30c;--crit:#d03b3b;
+--warn:#fab219;--good-soft:rgba(12,163,12,.16);--crit-soft:rgba(208,59,59,.16)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--plane);color:var(--ink-2);
+font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:26px 20px 60px}
+header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+h1{font-size:20px;margin:0;color:var(--ink);font-weight:650}
+h1 small{color:var(--accent);font-weight:600;font-size:13px;margin-left:6px}
+.stats{display:flex;gap:16px;font-size:13px;color:var(--ink-3);margin-left:auto}
+.stats b{color:var(--ink);font-variant-numeric:tabular-nums}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin-bottom:18px;overflow:hidden}
+.panel h2{font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);
+margin:0;padding:12px 16px;border-bottom:1px solid var(--line);font-weight:600}
+.panel .body{padding:14px 16px}
+.grid{display:grid;grid-template-columns:1fr 300px;gap:18px}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+
+/* timeline */
+.axis{display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink-3);
+margin:0 0 6px 150px;font-variant-numeric:tabular-nums}
+.tl-row{display:flex;align-items:center;gap:10px;margin-bottom:7px}
+.tl-ip{width:140px;font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums;
+white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl-bar{position:relative;flex:1;height:16px;background:var(--surface-2);border-radius:4px;overflow:hidden}
+.seg{position:absolute;top:0;bottom:0;background:rgba(12,163,12,.55);border-radius:3px}
+.seg.live{background:var(--good);box-shadow:0 0 6px rgba(12,163,12,.5)}
+.tl-dot{width:7px;height:7px;border-radius:50%;background:var(--ink-3);flex-shrink:0}
+.tl-dot.on{background:var(--good);box-shadow:0 0 6px rgba(12,163,12,.7)}
+
+/* table */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);
+font-weight:600;padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:8px 10px;border-bottom:1px solid var(--line);color:var(--ink-2);
+font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:none}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600}
+.badge.on{color:var(--good);background:var(--good-soft)}
+.badge.off{color:var(--ink-3);background:var(--surface-2)}
+.dim{color:var(--ink-3)}
+
+/* events */
+.feed{list-style:none;margin:0;padding:0;max-height:340px;overflow-y:auto}
+.feed li{display:flex;gap:10px;align-items:baseline;padding:7px 2px;border-bottom:1px solid var(--line);font-size:12.5px}
+.feed li:last-child{border-bottom:none}
+.ev{font-weight:700;font-size:11px;width:58px;flex-shrink:0}
+.ev.online{color:var(--good)}
+.ev.offline{color:var(--crit)}
+.feed time{color:var(--ink-3);font-variant-numeric:tabular-nums}
+.empty{color:var(--ink-3);font-size:13px;padding:8px 0}
+footer{color:var(--ink-3);font-size:12px;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>ipwatch <small>LAN presence</small></h1>
+    <div class="stats">
+      <span>online <b id="st-online">–</b>/<b id="st-total">–</b></span>
+      <span>last sweep <b id="st-sweep">–</b></span>
+      <span id="st-updated" class="dim">–</span>
+    </div>
+  </header>
+
+  <div class="grid" style="grid-template-columns:1fr">
+    <section class="panel">
+      <h2>Last 24 hours — presence timeline</h2>
+      <div class="body">
+        <div class="axis" id="axis"></div>
+        <div id="tl"><div class="empty">Loading…</div></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="grid">
+    <section class="panel">
+      <h2>Devices</h2>
+      <div class="body" style="padding:0 6px">
+        <table>
+          <thead><tr><th>IP</th><th>MAC</th><th>State</th><th>First seen</th><th>Last seen</th><th>Episodes today</th></tr></thead>
+          <tbody id="dev-body"><tr><td colspan="6" class="dim">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Recent transitions</h2>
+      <div class="body">
+        <ul class="feed" id="feed"><li class="empty">Loading…</li></ul>
+      </div>
+    </section>
+  </div>
+
+  <footer>read-only dashboard · refreshes every 5s · data: ipwatch SQLite (presence intervals + sightings)</footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const fmtT = (iso) => { const d = new Date(iso); return isNaN(d) ? '–' :
+  d.toLocaleString([], {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}); };
+const fmtTFull = (iso) => { const d = new Date(iso); return isNaN(d) ? '–' :
+  d.toLocaleString([], {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}); };
+const dur = (ms) => { if (ms < 0) ms = 0; const s = Math.floor(ms/1000);
+  if (s < 60) return s + 's'; const m = Math.floor(s/60); if (m < 60) return m + 'm';
+  const h = Math.floor(m/60); return h + 'h' + (m%60) + 'm'; };
+
+async function jget(u) { const r = await fetch(u, {cache:'no-store'});
+  if (!r.ok) throw new Error(u + ' -> ' + r.status); return r.json(); }
+
+async function refresh() {
+  try {
+    const [st, tl, ev] = await Promise.all([
+      jget('/api/state'), jget('/api/timeline?hours=24'), jget('/api/events')]);
+
+    $('st-online').textContent = st.online;
+    $('st-total').textContent = st.total;
+    $('st-sweep').textContent = st.last_sweep ? fmtTFull(st.last_sweep) : '–';
+    $('st-updated').textContent = 'updated ' + new Date().toLocaleTimeString();
+
+    /* timeline */
+    const from = tl.from, to = tl.to, span = to - from;
+    const axis = $('axis');
+    axis.innerHTML = '';
+    for (let i = 0; i <= 4; i++) {
+      const t = new Date(from + span * i / 4);
+      const el = document.createElement('span');
+      el.textContent = t.getHours().toString().padStart(2,'0') + ':' +
+                       t.getMinutes().toString().padStart(2,'0');
+      axis.appendChild(el);
+    }
+    const box = $('tl');
+    if (!tl.rows.length) { box.innerHTML = '<div class="empty">No presence data yet.</div>'; }
+    else {
+      box.innerHTML = '';
+      for (const row of tl.rows) {
+        const div = document.createElement('div'); div.className = 'tl-row';
+        const ip = document.createElement('div'); ip.className = 'tl-ip'; ip.textContent = row.ip;
+        const dot = document.createElement('span'); dot.className = 'tl-dot' + (row.online ? ' on' : '');
+        const bar = document.createElement('div'); bar.className = 'tl-bar';
+        for (const s of row.segs) {
+          const seg = document.createElement('div'); seg.className = 'seg' + (s.end === 0 ? ' live' : '');
+          const l = Math.max(0, (s.start - from) / span * 100);
+          const r = s.end === 0 ? 100 : Math.min(100, (s.end - from) / span * 100);
+          seg.style.left = l + '%'; seg.style.width = Math.max(0.4, r - l) + '%';
+          if (s.end === 0) seg.title = 'online since ' + fmtTFull(new Date(s.start).toISOString());
+          bar.appendChild(seg);
+        }
+        div.append(ip, dot, bar); box.appendChild(div);
+      }
+    }
+
+    /* device table */
+    const tb = $('dev-body'); tb.innerHTML = '';
+    if (!st.devices.length) {
+      tb.innerHTML = '<tr><td colspan="6" class="dim">No devices recorded yet.</td></tr>';
+    } else {
+      for (const d of st.devices) {
+        const tr = document.createElement('tr');
+        const state = d.online
+          ? '<span class="badge on">ONLINE ' + dur(Date.now() - Date.parse(d.since)) + '</span>'
+          : '<span class="badge off">offline</span>';
+        tr.innerHTML =
+          '<td class="mono">' + d.ip + '</td>' +
+          '<td class="mono dim">' + (d.mac || '—') + '</td>' +
+          '<td>' + state + '</td>' +
+          '<td class="dim">' + fmtT(d.first_seen) + '</td>' +
+          '<td class="dim">' + fmtT(d.last_seen) + '</td>' +
+          '<td>' + d.episodes_today + '</td>';
+        tb.appendChild(tr);
+      }
+    }
+
+    /* transitions feed */
+    const feed = $('feed'); feed.innerHTML = '';
+    if (!ev.length) feed.innerHTML = '<li class="empty">No transitions in the last 24h.</li>';
+    for (const e of ev) {
+      const li = document.createElement('li');
+      li.innerHTML = '<span class="ev ' + e.type + '">' +
+        (e.type === 'online' ? 'UP' : 'DOWN') + '</span>' +
+        '<time>' + fmtTFull(e.at) + '</time>' +
+        '<span class="mono">' + e.ip + '</span>';
+      feed.appendChild(li);
+    }
+  } catch (e) {
+    $('st-updated').textContent = 'refresh failed: ' + e.message;
+  }
+}
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
