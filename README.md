@@ -53,7 +53,7 @@ darwin/arm64** are attached to every [release](https://github.com/snail2sky/star
 together with `checksums.txt`.
 
 ```bash
-VER=v1.1.0
+VER=v1.2.1
 curl -sL -o starfleet.tar.gz \
   "https://github.com/snail2sky/starfleet/releases/download/${VER}/starfleet_${VER}_linux_amd64.tar.gz"
 echo "<sha256 from checksums.txt>" | sha256sum -c
@@ -256,6 +256,23 @@ between them costs nothing.
 
 `Boot` = starts automatically with starfleet (`autostart`);
 `Autorestart` = restart policy when the process exits.
+
+## ipwatch (bundled)
+
+Every release also ships `ipwatch`, a small LAN presence tracker: it
+sweeps a /24 every 15s (parallel pings + kernel neighbor table) and
+records **online/offline intervals + raw sightings in SQLite** for later
+analysis.
+
+```bash
+ipwatch -subnet 192.168.1.0/24 -db ipwatch.db        # start recording
+ipwatch -db ipwatch.db -summary                      # devices + today's episodes
+sqlite3 ipwatch.db 'SELECT * FROM presence ORDER BY online_at DESC LIMIT 20'
+```
+
+Tables: `presence` (ip, online_at → offline_at, mac), `sightings`
+(ts, ip, mac, source, rtt_ms — 30d retention), `devices` (inventory).
+Run it under starfleet for supervision (see `conf.d/ipwatch.yml` style).
 
 ## Docker
 

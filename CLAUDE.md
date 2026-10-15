@@ -3,7 +3,7 @@
 ## Overview
 Starfleet is a process management and scheduling platform (Go backend, Vue 3
 frontend): a supervisord replacement with a web dashboard, a TUI, a CLI, real-time
-logs, health checks and hot reload. Current release: **v1.1.0**.
+logs, health checks and hot reload. Current release: **v1.2.1**.
 
 ## Tech Stack
 - **Backend**: Go 1.24+, Gin, robfig/cron/v3, gopsutil/v4, coder/websocket,
@@ -11,7 +11,7 @@ logs, health checks and hot reload. Current release: **v1.1.0**.
 - **Frontend**: Vue 3 + `<script setup>`, Vite, Pinia, Vue Router, Element Plus
 - **Terminal UI**: bubbletea / bubbles / lipgloss
 - **Testing**: stdlib testing + table-driven tests; `stretchr/testify` not used
-- **CI/CD**: GitHub Actions (ci.yml per push; release.yml per `v*` tag → 5 platform binaries)
+- **CI/CD**: GitHub Actions (ci.yml per push; release.yml per `v*` tag → starfleet + ipwatch, 5 platform tarballs with examples/)
 
 ## Project Structure
 - `cmd/starfleet/` — CLI (cobra): main.go (server/TUI/validate/status), control.go (start/stop/restart/reload/logs/run/schedules)
@@ -80,4 +80,4 @@ go test ./internal/scheduler/ -v    # cron + enable/disable
   add client method in `internal/client/client.go`
 - New TUI feature: keys in `internal/tui/model.go`, keep the web UI in parity
   (README parity table)
-- Release: tag `v1.1.1` etc. — `release.yml` builds the matrix
+- Release: tag `v1.2.2` etc. — `release.yml` builds the matrix

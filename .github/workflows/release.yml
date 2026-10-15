@@ -56,6 +56,10 @@ jobs:
             -ldflags "-s -w -X main.version=${GITHUB_REF_NAME} -X main.commit=${GITHUB_SHA::8} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             -o "starfleet_${GITHUB_REF_NAME}_${GOOS}_${ARCH}/starfleet" \
             ./cmd/starfleet/
+          # Companion LAN presence tracker (no version vars — plain build).
+          go build -trimpath -ldflags "-s -w" \
+            -o "starfleet_${GITHUB_REF_NAME}_${GOOS}_${ARCH}/ipwatch" \
+            ./cmd/ipwatch/
           cp README.md LICENSE "starfleet_${GITHUB_REF_NAME}_${GOOS}_${ARCH}/"
           cp -r configs "starfleet_${GITHUB_REF_NAME}_${GOOS}_${ARCH}/examples"
           tar -czf "starfleet_${GITHUB_REF_NAME}_${GOOS}_${ARCH}.tar.gz" "starfleet_${GITHUB_REF_NAME}_${GOOS}_${ARCH}"
@@ -67,6 +71,8 @@ jobs:
           ./sf --help | head -5
           ./sf validate -c configs/starfleet.yml
           ./sf validate -c configs/demo/starfleet.yml
+          mv starfleet_*_linux_amd64/ipwatch ./ipwatch
+          ./ipwatch -db /tmp/ipwatch-smoke.db -summary
       - uses: actions/upload-artifact@v4
         with:
           name: starfleet-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm && format('-v{0}', matrix.goarm) || '' }}
