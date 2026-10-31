@@ -599,9 +599,9 @@ func (m Model) View() string {
 	var content string
 	switch m.tab {
 	case 0:
-		content = m.procTable.View()
+		content = colorizeTableView(m.procTable.View(), m.procTable.Columns(), TableStyles())
 	case 1:
-		content = m.schedTable.View()
+		content = colorizeTableView(m.schedTable.View(), m.schedTable.Columns(), TableStyles())
 	case 2:
 		content = m.viewHelp()
 	}
@@ -1099,7 +1099,7 @@ func (m *Model) refreshData() {
 		}
 		rows[i] = table.Row{
 			p.Name,
-			StateBadge(p.State),
+			p.State, // 纯文本；颜色在 View 阶段补（见 tint.go）
 			OnOff(p.Autostart),
 			fmt.Sprintf("%d", p.PID),
 			formatUptime(p.Uptime),

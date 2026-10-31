@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 	"github.com/snail2sky/starfleet/internal/config"
 	"github.com/snail2sky/starfleet/internal/engine"
@@ -268,29 +270,46 @@ func TestViewSchedDetailRendersHistoryEmpty(t *testing.T) {
 	_ = lipgloss.NewStyle() // 保证样式包被引用（避免误删 import）
 }
 
-// 开关类配置必须带颜色（on 绿 / off 红），比裸 true/false 直观。
-func TestToggleStylesHaveColor(t *testing.T) {
+// 开关类配置：单元格是纯文本（对齐保证），颜色在 View 阶段注入非选中行。
+func TestToggleColorsAppliedInView(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	defer lipgloss.SetColorProfile(termenv.Ascii)
 
-	on := OnOff(true)
-	off := OnOff(false)
-	if !strings.Contains(on, "on") || !strings.Contains(off, "off") {
-		t.Errorf("文本: %q / %q", on, off)
+	if OnOff(true) != "on" || OnOff(false) != "off" {
+		t.Errorf("单元格必须是纯文本: %q %q", OnOff(true), OnOff(false))
 	}
-	if on == off {
-		t.Errorf("开与关必须可区分")
+	if RestartPolicy("true") != "always" || RestartPolicy("unexpected") != "unexpected" || RestartPolicy("false") != "never" {
+		t.Errorf("策略必须是语义化纯文本: %q %q %q",
+			RestartPolicy("true"), RestartPolicy("unexpected"), RestartPolicy("false"))
 	}
-	// 真彩下应有 SGR 颜色码
-	if !strings.Contains(on, "\x1b[") {
-		t.Errorf("on 应带颜色码: %q", on)
+	fm := &fakeManager{
+		procs: []engine.ProcessInfo{
+			{Name: "app", State: "RUNNING", Autostart: true, Autorestart: "unexpected", Command: "run-app"},
+			{Name: "down", State: "STOPPED", Autostart: false, Autorestart: "false", Command: "run-x"},
+		},
+		jobs: []scheduler.JobInfo{
+			{Name: "j-on", Cron: "* * * * *", Enabled: true, Command: "c"},
+			{Name: "j-off", Cron: "* * * * *", Enabled: false, Command: "c"},
+		},
 	}
-	always, unexpected, never := RestartPolicy("true"), RestartPolicy("unexpected"), RestartPolicy("false")
-	if !strings.Contains(always, "always") || !strings.Contains(unexpected, "unexpected") || !strings.Contains(never, "never") {
-		t.Errorf("策略文案: %q %q %q", always, unexpected, never)
+	m := NewModel(fm)
+	m.width, m.height = 160, 40
+	m.resizeTables()
+	m.refreshData()
+	m.refreshSchedules()
+
+	// 光标停在第0行 → 第0行保持统一（无内嵌色），第1行的单元格有色
+	procView := colorizeTableView(m.procTable.View(), m.procTable.Columns(), TableStyles())
+	if strings.Contains(strings.Split(procView, "\n")[1], "\x1b[38;2;") {
+		t.Errorf("选中行不应内嵌单元格色:\n%s", strings.Split(procView, "\n")[1])
 	}
-	if len(map[string]bool{always: true, unexpected: true, never: true}) != 3 {
-		t.Errorf("三种策略必须可区分")
+	unsel := strings.Split(procView, "\n")[2]
+	if !strings.Contains(unsel, "\x1b[38;2;") {
+		t.Errorf("非选中行的 on/状态 应着色:\n%q", unsel)
+	}
+	schedView := colorizeTableView(m.schedTable.View(), m.schedTable.Columns(), TableStyles())
+	if !strings.Contains(schedView, "\x1b[38;2;") {
+		t.Errorf("schedules 非选中行也应着色:\n%s", schedView)
 	}
 }
 
@@ -341,17 +360,11 @@ func TestRowsUseDynamicCmdWidthAndColoredToggles(t *testing.T) {
 	if row[7] != long && len([]rune(row[7])) < 60 {
 		t.Errorf("宽屏下 command 应保留更多: %q", row[7])
 	}
-	if !strings.Contains(row[2], "on") || !strings.Contains(row[2], "\x1b[") {
-		t.Errorf("BOOT 应为着色的 on: %q", row[2])
+	if row[2] != "on" {
+		t.Errorf("BOOT 应为纯文本 on: %q", row[2])
 	}
-	if !strings.Contains(row[6], "unexpected") {
+	if row[6] != "unexpected" {
 		t.Errorf("AUTORESTART 应显示策略名: %q", row[6])
-	}
-
-	m.refreshSchedules()
-	srow := m.schedTable.SelectedRow()
-	if !strings.Contains(srow[3], "\x1b[") {
-		t.Errorf("ENABLED 应着色: %q", srow[3])
 	}
 
 	// 窄屏：截断生效
@@ -383,5 +396,107 @@ func TestWindowSizeTriggersRefit(t *testing.T) {
 	lastCol := got.procTable.Columns()[len(got.procTable.Columns())-1]
 	if lastCol.Width != got.cmdWidth {
 		t.Errorf("表格末列宽=%d 与 cmdWidth=%d 不一致", lastCol.Width, got.cmdWidth)
+	}
+}
+
+// 对齐回归：着色后的视图，每行的“显示宽度”必须完全一致
+// （列错位的根因是 v1.0.0 用 runewidth.Truncate 计算含 ANSI 的单元格宽度）。
+func TestColorizedViewRowsAligned(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	long := "/usr/bin/very-long-binary --flag-one --flag-two --flag-three --flag-four=1234567890 --tail"
+	fm := &fakeManager{
+		procs: []engine.ProcessInfo{
+			{Name: "中文进程名", State: "RUNNING", Autostart: true, Autorestart: "unexpected", Command: long},
+			{Name: "app2", State: "BACKOFF", Autostart: false, Autorestart: "never", Command: "x"},
+		},
+		jobs: []scheduler.JobInfo{
+			{Name: "job1", Cron: "*/5 * * * *", Enabled: true, Command: long},
+			{Name: "定时任务二", Cron: "@every 1m", Enabled: false, URL: "http://example.com/very/long/path"},
+		},
+	}
+	m := NewModel(fm)
+	m.width, m.height = 140, 40
+	m.resizeTables()
+	m.refreshData()
+	m.refreshSchedules()
+
+	for name, view := range map[string]string{
+		"proc":  colorizeTableView(m.procTable.View(), m.procTable.Columns(), TableStyles()),
+		"sched": colorizeTableView(m.schedTable.View(), m.schedTable.Columns(), TableStyles()),
+	} {
+		lines := strings.Split(view, "\n")
+		var width int
+		var seen bool
+		for _, ln := range lines {
+			if strings.TrimSpace(ansi.Strip(ln)) == "" {
+				continue
+			}
+			w := ansi.StringWidth(ln)
+			if !seen {
+				width, seen = w, true
+				continue
+			}
+			if w != width {
+				t.Errorf("%s 视图行宽不一致: %d vs %d\n行: %q", name, width, w, ln)
+			}
+		}
+	}
+}
+
+// 对齐不变量（本次 bug 的直接回归锁）：着色后的表格，每一行的可见宽度
+// 必须完全一致。v1.7.0 曾因在单元格里放 ANSI + ●/○ 模糊宽度字符而错位。
+func TestColoredViewKeepsAlignment(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	// 混排：中文名（多字节）、长命令（触发截断）、各种开关值
+	fm := &fakeManager{
+		procs: []engine.ProcessInfo{
+			{Name: "nginx", State: "RUNNING", Autostart: true, Autorestart: "true", Command: "nginx: master process /usr/sbin/nginx -g daemon off;"},
+			{Name: "中文服务名", State: "BACKOFF", Autostart: false, Autorestart: "unexpected", Command: "python3 /opt/服务/启动.py --config /etc/服务/config.yaml --verbose"},
+			{Name: "tiny", State: "STOPPED", Autostart: false, Autorestart: "false", Command: "true"},
+		},
+		jobs: []scheduler.JobInfo{
+			{Name: "backup", Cron: "0 3 * * *", Enabled: true, Command: "/opt/backup.sh --all --compress"},
+			{Name: "探活", Cron: "@every 1m", Enabled: false, URL: "http://192.168.1.1:8080/healthz/long/path"},
+		},
+	}
+	m := NewModel(fm)
+	m.width, m.height = 140, 40
+	m.resizeTables()
+	m.refreshData()
+	m.refreshSchedules()
+
+	checkAlignment := func(name, view string) {
+		t.Helper()
+		var want int
+		var bad []string
+		for _, ln := range strings.Split(view, "\n") {
+			if strings.TrimSpace(ansi.Strip(ln)) == "" {
+				continue
+			}
+			w := ansi.StringWidth(ln)
+			if want == 0 {
+				want = w
+				continue
+			}
+			if w != want {
+				bad = append(bad, ln)
+			}
+		}
+		if len(bad) > 0 {
+			t.Errorf("%s 行宽不一致（期望 %d），错位行:\n%s", name, want, strings.Join(bad, "\n"))
+		}
+	}
+	checkAlignment("processes", colorizeTableView(m.procTable.View(), m.procTable.Columns(), TableStyles()))
+	checkAlignment("schedules", colorizeTableView(m.schedTable.View(), m.schedTable.Columns(), TableStyles()))
+
+	// 各种光标位置都不应破坏对齐
+	for c := 0; c < 3; c++ {
+		m.procTable.SetCursor(c)
+		checkAlignment(fmt.Sprintf("processes/cursor=%d", c),
+			colorizeTableView(m.procTable.View(), m.procTable.Columns(), TableStyles()))
 	}
 }

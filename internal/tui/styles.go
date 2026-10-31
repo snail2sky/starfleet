@@ -70,25 +70,26 @@ func TableStyles() table.Styles {
 	return ts
 }
 
-// OnOff renders a boolean switch with color (green on / red off) — the TUI
-// equivalent of the web UI's colored switches; plain true/false is hard to scan.
+// OnOff renders a boolean switch as plain text — color is applied at view
+// time (see tint.go): bubbles v1 truncates cells with runewidth, which cannot
+// handle ANSI, so cell values must stay plain.
 func OnOff(on bool) string {
 	if on {
-		return SuccessStyle.Render("● on")
+		return "on"
 	}
-	return ErrorStyle.Render("○ off")
+	return "off"
 }
 
-// RestartPolicy renders the autorestart policy with color:
-// always=green, unexpected=yellow, never=gray.
+// RestartPolicy renders the autorestart policy as a semantic word
+// (always / unexpected / never); color is applied at view time.
 func RestartPolicy(v string) string {
 	switch v {
 	case "true", "on":
-		return SuccessStyle.Render("● always")
+		return "always"
 	case "unexpected":
-		return WarningStyle.Render("● unexpected")
+		return "unexpected"
 	default:
-		return MutedStyle.Render("○ never")
+		return "never"
 	}
 }
 
