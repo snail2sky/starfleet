@@ -173,7 +173,7 @@ func TestScheduleHTTPSuccess(t *testing.T) {
 		b, _ := io.ReadAll(r.Body)
 		got <- received{r.Method, r.Header.Get("X-Token"), string(b), r.Header.Get("Content-Type")}
 		w.WriteHeader(200)
-		w.Write([]byte("pong"))
+		_, _ = w.Write([]byte("pong"))
 	}))
 	defer ts.Close()
 
@@ -223,7 +223,7 @@ func TestScheduleHTTPGetDefault(t *testing.T) {
 func TestScheduleHTTPServerError(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(503)
-		w.Write([]byte("busy"))
+		_, _ = w.Write([]byte("busy"))
 	}))
 	defer ts.Close()
 	entry := runJob(t, "http-503", config.ScheduleConfig{Cron: "@every 24h", Type: "http", URL: ts.URL})
