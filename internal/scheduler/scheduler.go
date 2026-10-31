@@ -364,9 +364,11 @@ func (j *Job) Info() JobInfo {
 		Enabled: j.Config.Enabled,
 		Timeout: j.Config.Timeout.String(),
 		Labels:  j.Config.Labels,
-		// 注意：刻意不在 API 暴露 Environment——其中可能含密钥。
+		// 注意：刻意不在 API 暴露 Environment / Headers / Body——其中可能含密钥。
 		Directory: j.Config.Directory,
 		User:      j.Config.User,
+		Method:    j.Config.Method,
+		Args:      j.Config.Args,
 	}
 }
 
@@ -383,4 +385,6 @@ type JobInfo struct {
 	Labels    map[string]string `json:"labels"`
 	Directory string            `json:"directory,omitempty"`
 	User      string            `json:"user,omitempty"`
+	Method    string            `json:"method,omitempty"` // http 任务的请求方法
+	Args      []string          `json:"args,omitempty"`   // exec 任务的直接参数
 }

@@ -1,6 +1,9 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/lipgloss"
+)
 
 // Color palette (matching web UI dark theme).
 var (
@@ -55,6 +58,17 @@ var (
 	MutedStyle   = lipgloss.NewStyle().Foreground(Muted)
 	BoldStyle    = lipgloss.NewStyle().Bold(true)
 )
+
+// TableStyles is the single source of truth for table styling.
+// Every table must use it — before v1.5 the schedules table used the
+// library default (red selection) while processes used blue, which looked
+// broken when switching tabs.
+func TableStyles() table.Styles {
+	ts := table.DefaultStyles()
+	ts.Header = ts.Header.Bold(true).Foreground(Primary)
+	ts.Selected = ts.Selected.Foreground(Primary).Background(BgCard)
+	return ts
+}
 
 // StateColor returns the color for a process state.
 func StateColor(state string) lipgloss.Color {

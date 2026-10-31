@@ -254,18 +254,22 @@ between them costs nothing.
 |---|--------|-----|
 | Process columns | Name · State · Boot · PID · Uptime · Retries · Autorestart · Command | same |
 | Schedule columns | Job · Schedule · Type · Enabled · Next run · Timeout · Command | same |
-| Full process details | click row → dialog | `Enter` |
+| Full process details | click row → dialog | `Enter` (Processes tab) |
 | Process logs | Logs tab | `l` |
 | Starfleet's own logs | Logs page (default source) | `0` |
 | Start / Stop / Restart | row buttons | `s` / `t` / `r` |
 | Toggle boot start | Boot switch | `e` |
 | Change autorestart | Autorestart cell (click to cycle) | `R` |
-| Trigger a schedule | Run now | `r` (Schedules tab) |
-| Enable/disable schedule | Enabled switch | `e` (Schedules tab) |
-| Execution history | History | `h` (Schedules tab) |
+| Schedule details (cron/type/command·url/args/directory/user/最近执行) | click row → dialog | `Enter` (Schedules tab) |
+| Trigger a schedule | Run now | `r` |
+| Enable/disable schedule | Enabled switch | `e` |
+| Execution history | History | `h`（列表或详情页） |
 | Today's runs (daily view) | Today panel + column | `d` (Schedules tab) |
 | System overview | Overview page | — |
 | Config status | Settings page | — |
+
+TUI 通用键：`←` 在子页面（详情/日志/历史/今日）**返回上级**、在列表里切上一个 tab；
+`→` 同理；`Tab` / `1` `2` `3` 切标签页；`esc` 返回；`q` 退出。
 
 `Boot` = starts automatically with starfleet (`autostart`);
 `Autorestart` = restart policy when the process exits.

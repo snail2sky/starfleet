@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -24,6 +25,7 @@ const (
 	ViewLogs
 	ViewSchedHistory
 	ViewSchedDaily
+	ViewSchedDetail
 )
 
 // Model is the main TUI model.
@@ -53,10 +55,13 @@ type Model struct {
 	logLoaded  bool // true once first fetch completed for current process
 
 	// Schedule table
-	schedTable    table.Model
-	schedHistName string
-	schedHist     []scheduler.HistoryEntry
-	schedDaily    scheduler.DailyReport
+	schedTable      table.Model
+	schedHistName   string
+	schedHist       []scheduler.HistoryEntry
+	schedDaily      scheduler.DailyReport
+	schedDetailName string
+	schedDetail     scheduler.JobInfo
+	schedDetailHist []scheduler.HistoryEntry
 
 	// Common
 	spinner  spinner.Model
@@ -103,10 +108,7 @@ func NewModel(manager Manager) Model {
 		table.WithFocused(true),
 		table.WithHeight(10),
 	)
-	ts := table.DefaultStyles()
-	ts.Header = ts.Header.Bold(true).Foreground(Primary)
-	ts.Selected = ts.Selected.Foreground(Primary).Background(lipgloss.Color("#1e293b"))
-	pt.SetStyles(ts)
+	pt.SetStyles(TableStyles()) // 全部表格共用一套样式（schedules 以前漏了，选中是库默认的红色）
 
 	// Schedule table.
 	schedCols := []table.Column{
@@ -120,8 +122,10 @@ func NewModel(manager Manager) Model {
 	}
 	st := table.New(
 		table.WithColumns(schedCols),
+		table.WithFocused(true),
 		table.WithHeight(10),
 	)
+	st.SetStyles(TableStyles())
 
 	return Model{
 		manager:    manager,
@@ -236,17 +240,20 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.viewMode = ViewLogs
 		return m, nil
 
-	// ← → switch tabs from anywhere (leaving detail/log views first).
+	// ← 在子页面（详情/日志/历史/今日）= 返回上级列表；在列表里 = 切上一个 tab。
 	case key.Matches(msg, key.NewBinding(key.WithKeys("left"))):
-		if m.tab > 0 {
-			m.tab--
+		if m.viewMode != ViewList {
 			m.viewMode = ViewList
+		} else if m.tab > 0 {
+			m.tab--
 		}
 		return m, nil
+	// → 在子页面同样先回列表（避免"看详情时按→跳到别的 tab"的错愕）；列表里切下一个 tab。
 	case key.Matches(msg, key.NewBinding(key.WithKeys("right"))):
-		if m.tab < len(tabs)-1 {
-			m.tab++
+		if m.viewMode != ViewList {
 			m.viewMode = ViewList
+		} else if m.tab < len(tabs)-1 {
+			m.tab++
 		}
 		return m, nil
 	}
@@ -261,16 +268,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleLogKey(msg)
 	case ViewSchedHistory:
 		switch {
-		case key.Matches(msg, key.NewBinding(key.WithKeys("esc", "backspace", "q"))):
+		case key.Matches(msg, key.NewBinding(key.WithKeys("esc", "backspace"))):
 			m.viewMode = ViewList
 		}
 		return m, nil
 	case ViewSchedDaily:
 		switch {
-		case key.Matches(msg, key.NewBinding(key.WithKeys("esc", "backspace", "q"))):
+		case key.Matches(msg, key.NewBinding(key.WithKeys("esc", "backspace"))):
 			m.viewMode = ViewList
 		}
 		return m, nil
+	case ViewSchedDetail:
+		return m.handleSchedDetailKey(msg)
 	}
 	return m, nil
 }
@@ -416,6 +425,52 @@ func (m Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Daily overview: today's runs across all schedules.
 			m.schedDaily = m.manager.ScheduleDaily()
 			m.viewMode = ViewSchedDaily
+
+		case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):
+			// 任务详情：完整配置 + 最近几次执行（配置、参数、工作目录一目了然）。
+			row := m.schedTable.SelectedRow()
+			if len(row) > 0 {
+				m.schedDetailName = row[0]
+				m.schedDetailHist = m.manager.ScheduleHistory(row[0], 5)
+				for _, j := range m.manager.Schedules() {
+					if j.Name == row[0] {
+						m.schedDetail = j
+						break
+					}
+				}
+				m.viewMode = ViewSchedDetail
+			}
+		}
+	}
+	return m, nil
+}
+
+// handleSchedDetailKey drives the schedule detail view.
+func (m Model) handleSchedDetailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, key.NewBinding(key.WithKeys("esc", "backspace"))):
+		m.viewMode = ViewList
+	case key.Matches(msg, key.NewBinding(key.WithKeys("h"))):
+		m.schedHistName = m.schedDetailName
+		m.schedHist = m.manager.ScheduleHistory(m.schedDetailName, 50)
+		m.viewMode = ViewSchedHistory
+	case key.Matches(msg, key.NewBinding(key.WithKeys("r"))):
+		if err := m.manager.RunSchedule(m.schedDetailName); err != nil {
+			m.showMessage(fmt.Sprintf("✗ %v", err))
+		} else {
+			m.showMessage(fmt.Sprintf("✓ triggered %s", m.schedDetailName))
+		}
+	case key.Matches(msg, key.NewBinding(key.WithKeys("e"))):
+		next := !m.schedDetail.Enabled
+		if err := m.manager.SetScheduleEnabled(m.schedDetailName, next); err != nil {
+			m.showMessage(fmt.Sprintf("✗ %v", err))
+		} else {
+			m.schedDetail.Enabled = next
+			if next {
+				m.showMessage(fmt.Sprintf("✓ %s enabled", m.schedDetailName))
+			} else {
+				m.showMessage(fmt.Sprintf("✓ %s disabled", m.schedDetailName))
+			}
 		}
 	}
 	return m, nil
@@ -423,7 +478,7 @@ func (m Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleDetailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
-	case key.Matches(msg, key.NewBinding(key.WithKeys("esc", "backspace", "q"))):
+	case key.Matches(msg, key.NewBinding(key.WithKeys("esc", "backspace"))):
 		m.viewMode = ViewList
 	case key.Matches(msg, key.NewBinding(key.WithKeys("l"))):
 		// Switch from detail view to the log view of the same process.
@@ -441,7 +496,7 @@ func (m Model) handleDetailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleLogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	maxScroll := len(m.logEntries) - (m.height - 10)
 	switch {
-	case key.Matches(msg, key.NewBinding(key.WithKeys("esc", "backspace", "q"))):
+	case key.Matches(msg, key.NewBinding(key.WithKeys("esc", "backspace"))):
 		m.viewMode = ViewList
 	case key.Matches(msg, key.NewBinding(key.WithKeys("s"))):
 		// Toggle source: starfleet server logs <-> process logs.
@@ -484,6 +539,8 @@ func (m Model) View() string {
 		return m.viewSchedHistory()
 	case ViewSchedDaily:
 		return m.viewSchedDaily()
+	case ViewSchedDetail:
+		return m.viewSchedDetail()
 	}
 
 	// List view.
@@ -544,11 +601,25 @@ func (m Model) renderStatusBar() string {
 	var left string
 	switch m.tab {
 	case 0:
-		left = HelpStyle.Render("↑↓ move  ←→ tabs  Enter detail  l logs  0 srv logs  s start  t stop  r restart  e boot  R autorestart  q quit")
+		switch m.viewMode {
+		case ViewDetail:
+			left = HelpStyle.Render("← 返回  esc 返回  l 该进程日志  q quit")
+		case ViewLogs:
+			left = HelpStyle.Render("← 返回  esc 返回  ↑↓/gG 滚动  s 切换源  q quit")
+		default:
+			left = HelpStyle.Render("↑↓ move  Enter 详情  l logs  0 srv logs  s start  t stop  r restart  e boot  R autorestart  q quit")
+		}
 	case 1:
-		left = HelpStyle.Render("↑↓ move  r run  e enable/disable  h history  d daily  ←→ tabs  q quit")
+		switch m.viewMode {
+		case ViewSchedDetail:
+			left = HelpStyle.Render("← 返回  esc 返回  h 全部历史  r 立即执行  e 启用/停用  q quit")
+		case ViewSchedHistory, ViewSchedDaily:
+			left = HelpStyle.Render("← 返回  esc 返回  ↑↓ 滚动  q quit")
+		default:
+			left = HelpStyle.Render("↑↓ move  Enter 详情  r run  e enable/disable  h history  d daily  ←→ tabs  q quit")
+		}
 	default:
-		left = HelpStyle.Render("q quit")
+		left = HelpStyle.Render("↑↓ move  ←→ tabs  q quit")
 	}
 	right := ""
 	if m.message != "" {
@@ -740,6 +811,77 @@ func (m *Model) refreshLogs() {
 }
 
 // viewSchedHistory renders the execution history of a scheduled job.
+// viewSchedDetail shows the full configuration of one scheduled job plus its
+// most recent runs — the schedules tab used to be list-only.
+func (m Model) viewSchedDetail() string {
+	j := m.schedDetail
+	var b strings.Builder
+	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Center,
+		TitleStyle.Render("🕐 "+m.schedDetailName), " ", MutedStyle.Render("schedule detail")))
+	b.WriteString("\n\n")
+
+	enabled := ErrorStyle.Render("disabled")
+	if j.Enabled {
+		enabled = SuccessStyle.Render("enabled")
+	}
+	rows := [][2]string{
+		{"cron", j.Cron},
+		{"type", orDash(j.Type, "exec")},
+		{"enabled", enabled},
+		{"next run", orDash(j.NextRun, "—")},
+		{"timeout", j.Timeout},
+		{"directory", orDash(j.Directory, "—")},
+		{"user", orDash(j.User, "—")},
+	}
+	if j.Type == "http" {
+		rows = append(rows, [2]string{"url", j.URL}, [2]string{"method", orDash(j.Method, "GET")})
+	} else {
+		rows = append(rows, [2]string{"command", j.Command})
+		if len(j.Args) > 0 {
+			rows = append(rows, [2]string{"args", strings.Join(j.Args, " ")})
+		}
+	}
+	if len(j.Labels) > 0 {
+		var kv []string
+		for k, v := range j.Labels {
+			kv = append(kv, k+"="+v)
+		}
+		sort.Strings(kv)
+		rows = append(rows, [2]string{"labels", strings.Join(kv, ", ")})
+	}
+	for _, r := range rows {
+		fmt.Fprintf(&b, "  %s  %s\n", MutedStyle.Width(10).Render(r[0]), r[1])
+	}
+
+	b.WriteString("\n" + HelpStyle.Render("最近执行（更多按 h）") + "\n")
+	if len(m.schedDetailHist) == 0 {
+		b.WriteString("  " + MutedStyle.Render("（暂无执行记录）") + "\n")
+	}
+	for _, e := range m.schedDetailHist {
+		status := SuccessStyle.Render("✓")
+		if e.Error != "" {
+			status = ErrorStyle.Render("✗ " + truncate(e.Error, 60))
+		}
+		fmt.Fprintf(&b, "  %s  %s  %s\n",
+			MutedStyle.Render(e.StartTime.Format("01-02 15:04:05")),
+			status,
+			HelpStyle.Render(e.Duration.Round(time.Millisecond).String()))
+		if out := strings.TrimSpace(e.Output); out != "" {
+			first := truncate(strings.Split(out, "\n")[0], 90)
+			fmt.Fprintf(&b, "      %s\n", MutedStyle.Render(first))
+		}
+	}
+	b.WriteString("\n" + HelpStyle.Render("← 返回  h 全部历史  r 立即执行  e 启用/停用"))
+	return InfoBoxStyle.Width(m.width - 2).Render(b.String())
+}
+
+func orDash(v, dash string) string {
+	if v == "" {
+		return dash
+	}
+	return v
+}
+
 func (m Model) viewSchedHistory() string {
 	title := TitleStyle.Render(fmt.Sprintf("🕘 History: %s", m.schedHistName))
 	meta := MutedStyle.Render(fmt.Sprintf("  %d runs · auto-refresh 1s", len(m.schedHist)))
