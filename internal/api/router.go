@@ -46,6 +46,10 @@ func NewRouter(mgr *engine.Manager, sched *scheduler.Scheduler, hub *ws.Hub, cfg
 		processH.SetAutorestartPersister(persistAutorestart)
 	}
 	systemH := handler.NewSystemHandler(auth)
+	if mgr != nil && sched != nil {
+		// /metrics 需要进程与调度的实时状态
+		systemH.SetMetricsSources(mgr.List, sched.List)
+	}
 	authH := handler.NewAuthHandler(auth)
 	configH := handler.NewConfigHandler(cfg, loadCfg, reloadFn)
 	scheduleH := handler.NewScheduleHandler(sched)
@@ -94,6 +98,9 @@ func NewRouter(mgr *engine.Manager, sched *scheduler.Scheduler, hub *ws.Hub, cfg
 			schedules.POST("/:name/enable", scheduleH.Enable)
 			schedules.POST("/:name/disable", scheduleH.Disable)
 		}
+
+		// Prometheus 文本格式指标（Prometheus 抓取时可配 basic auth / bearer）。
+		v1.GET("/metrics", systemH.Metrics)
 
 		// System.
 		sys := v1.Group("/system")

@@ -4,11 +4,14 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/exec"
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -296,9 +299,57 @@ func (j *Job) runExec(entry HistoryEntry) HistoryEntry {
 }
 
 func (j *Job) runHTTP(entry HistoryEntry) HistoryEntry {
-	// HTTP job execution is a placeholder for now.
-	entry.Error = "http job type not yet implemented"
-	entry.ExitCode = -1
+	// http 任务：发请求，传输错误或状态码 >=400 视为失败；
+	// 状态行 + 最多 8KB 响应体记入 output。
+	if j.Config.URL == "" {
+		entry.Error = "http job requires url"
+		entry.ExitCode = -1
+		return entry
+	}
+	timeout := j.Config.Timeout
+	if timeout == 0 {
+		timeout = 30 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	method := j.Config.Method
+	if method == "" {
+		method = http.MethodGet
+	}
+	var body io.Reader
+	if j.Config.Body != "" {
+		body = strings.NewReader(j.Config.Body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, j.Config.URL, body)
+	if err != nil {
+		entry.Error = err.Error()
+		entry.ExitCode = -1
+		return entry
+	}
+	for k, v := range j.Config.Headers {
+		req.Header.Set(k, v)
+	}
+	if j.Config.Body != "" && req.Header.Get("Content-Type") == "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		entry.Error = err.Error()
+		entry.ExitCode = -1
+		return entry
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
+	entry.Output = fmt.Sprintf("HTTP %d %s\n%s", resp.StatusCode, http.StatusText(resp.StatusCode),
+		strings.TrimSpace(string(data)))
+	if resp.StatusCode >= 400 {
+		entry.Error = fmt.Sprintf("HTTP %d", resp.StatusCode)
+		entry.ExitCode = 1
+		return entry
+	}
+	entry.ExitCode = 0
 	return entry
 }
 

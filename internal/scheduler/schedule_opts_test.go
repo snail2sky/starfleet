@@ -1,6 +1,9 @@
 package scheduler
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,7 +22,9 @@ func runJob(t *testing.T, name string, scfg config.ScheduleConfig) HistoryEntry 
 	s := NewScheduler(bus)
 
 	cfg := config.DefaultConfig()
-	scfg.Type = "exec"
+	if scfg.Type == "" {
+		scfg.Type = "exec"
+	}
 	scfg.Enabled = true
 	cfg.Schedules[name] = scfg
 	if err := s.LoadFromConfig(cfg); err != nil {
@@ -158,5 +163,94 @@ func TestScheduleTimeoutKillsGroup(t *testing.T) {
 	}
 	if got.ExitCode == 0 {
 		t.Errorf("超时 ExitCode 不应为0: %d", got.ExitCode)
+	}
+}
+
+func TestScheduleHTTPSuccess(t *testing.T) {
+	type received struct{ method, header, body, ctype string }
+	got := make(chan received, 1)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		got <- received{r.Method, r.Header.Get("X-Token"), string(b), r.Header.Get("Content-Type")}
+		w.WriteHeader(200)
+		w.Write([]byte("pong"))
+	}))
+	defer ts.Close()
+
+	entry := runJob(t, "http-ok", config.ScheduleConfig{
+		Cron:    "@every 24h",
+		Type:    "http",
+		URL:     ts.URL + "/ping",
+		Method:  "POST",
+		Headers: map[string]string{"X-Token": "s3cret"},
+		Body:    `{"hello":"world"}`,
+	})
+	if entry.Error != "" {
+		t.Fatalf("http 任务失败: %s", entry.Error)
+	}
+	if entry.ExitCode != 0 {
+		t.Errorf("ExitCode=%d", entry.ExitCode)
+	}
+	if !strings.Contains(entry.Output, "HTTP 200") || !strings.Contains(entry.Output, "pong") {
+		t.Errorf("output=%q", entry.Output)
+	}
+	r := <-got
+	if r.method != "POST" || r.header != "s3cret" || r.body != `{"hello":"world"}` {
+		t.Errorf("服务端收到: %+v", r)
+	}
+	if r.ctype != "application/json" {
+		t.Errorf("Body 存在时应默认 Content-Type: application/json, got %q", r.ctype)
+	}
+}
+
+func TestScheduleHTTPGetDefault(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("默认方法应为 GET, got %s", r.Method)
+		}
+		if r.Header.Get("Content-Type") != "" {
+			t.Errorf("无 body 不应设 Content-Type")
+		}
+		w.WriteHeader(204)
+	}))
+	defer ts.Close()
+	entry := runJob(t, "http-get", config.ScheduleConfig{Cron: "@every 24h", Type: "http", URL: ts.URL})
+	if entry.Error != "" || entry.ExitCode != 0 {
+		t.Errorf("GET 默认方法失败: %+v", entry)
+	}
+}
+
+func TestScheduleHTTPServerError(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(503)
+		w.Write([]byte("busy"))
+	}))
+	defer ts.Close()
+	entry := runJob(t, "http-503", config.ScheduleConfig{Cron: "@every 24h", Type: "http", URL: ts.URL})
+	if entry.Error != "HTTP 503" {
+		t.Errorf("错误信息=%q want 'HTTP 503'", entry.Error)
+	}
+	if entry.ExitCode != 1 {
+		t.Errorf("ExitCode=%d want 1", entry.ExitCode)
+	}
+	if !strings.Contains(entry.Output, "busy") {
+		t.Errorf("output 应含响应体: %q", entry.Output)
+	}
+}
+
+func TestScheduleHTTPTransportError(t *testing.T) {
+	entry := runJob(t, "http-dead", config.ScheduleConfig{
+		Cron: "@every 24h", Type: "http",
+		URL: "http://127.0.0.1:1", // 无服务
+	})
+	if entry.Error == "" || entry.ExitCode != -1 {
+		t.Errorf("传输错误应 -1: %+v", entry)
+	}
+}
+
+func TestScheduleHTTPMissingURL(t *testing.T) {
+	entry := runJob(t, "http-nourl", config.ScheduleConfig{Cron: "@every 24h", Type: "http"})
+	if entry.Error == "" || !strings.Contains(entry.Error, "url") {
+		t.Errorf("缺 url 应明确报错: %+v", entry)
 	}
 }

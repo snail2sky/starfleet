@@ -105,6 +105,8 @@ type ScheduleConfig struct {
 	Type    string            `yaml:"type" json:"type"`           // "exec" or "http"
 	URL     string            `yaml:"url" json:"url,omitempty"`
 	Method  string            `yaml:"method" json:"method,omitempty"`
+	Headers map[string]string `yaml:"headers" json:"headers,omitempty"` // http 任务的请求头
+	Body    string            `yaml:"body" json:"body,omitempty"`       // http 任务的请求体
 	Timeout time.Duration     `yaml:"timeout" json:"timeout"`
 	Enabled bool              `yaml:"enabled" json:"enabled"`
 	Labels  map[string]string `yaml:"labels" json:"labels,omitempty"`

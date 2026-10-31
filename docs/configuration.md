@@ -228,12 +228,21 @@ processes:
 |------|------|--------|------|
 | `cron` | string | **必填** | 标准 5 段 cron（`分 时 日 月 周`）或 `@every 1h` 语法 |
 | `type` | string | `exec` | `exec`=执行命令 / `http`=发 HTTP 请求 |
-| `command` | string | exec 必填 | 要执行的 shell 命令 |
+| `command` | string | exec 必填 | 要执行的 shell 命令（给了 `args` 则直接 exec，不经 shell） |
+| `args` | []string | — | 追加给 command 的参数（存在时跳过 shell 直接 exec，变量不展开） |
 | `url` | string | http 必填 | HTTP 请求地址 |
 | `method` | string | `GET` | HTTP 方法 |
-| `timeout` | duration | `60s` | 单次执行超时 |
+| `headers` | map | — | HTTP 请求头（http 类型） |
+| `body` | string | — | HTTP 请求体（给了会自动带 `Content-Type: application/json`，可被 headers 覆盖） |
+| `timeout` | duration | `60s`(exec) / `30s`(http) | 单次执行超时 |
 | `enabled` | bool | `true` | 是否启用（false=暂停调度，保留定义） |
+| `environment` | map | — | 注入给任务的环境变量（**叠加**在继承环境之上，与 processes 同名字段同语义） |
+| `directory` | string | — | 任务工作目录 |
+| `user` | string | — | 以哪个用户运行（仅 POSIX；Windows 忽略，与 processes 一致） |
 | `labels` | map | — | 自定义标签 |
+
+> 执行细节：exec 超时会**杀掉整个进程组**（不留子孙孤儿）；http 的传输错误或
+> `>=400` 状态码视为失败，状态行 + 最多 8KB 响应体记入执行历史。
 
 ```yaml
 schedules:
@@ -241,6 +250,19 @@ schedules:
     cron: "0 3 * * *"          # 每天 03:00
     command: "/opt/backup.sh"
     timeout: 300s
+    enabled: true
+
+  # 需要环境变量/工作目录的场景（如 DDNS 更新器要走代理出海）
+  ddns_update:
+    cron: "*/5 * * * *"
+    command: "/opt/bin/ddns-update"
+    args: ["update", "--json"]  # 有 args → 直接 exec，不经 shell
+    directory: "/opt/bin"
+    user: deploy
+    environment:
+      HTTPS_PROXY: "http://127.0.0.1:7890"
+      API_TOKEN: "xxxx"
+    timeout: "120s"
     enabled: true
 
   health_ping:

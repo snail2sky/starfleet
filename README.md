@@ -28,6 +28,10 @@ dashboard, a keyboard-driven TUI, and a CLI that scripts well.
 - Standard 5-field cron and `@every` syntax
 - Enable/disable jobs without deleting them, run them on demand
 - Execution history with exit codes, duration and captured output
+- Two job types: `exec` (shell line, or direct exec via `args`) and `http`
+  (method/url/headers/body; `>=400` and transport errors fail the run)
+- Per-job `environment` / `directory` / `user` — same semantics as processes;
+  the environment overlays (not replaces) the inherited one
 
 **Interfaces**
 - Web dashboard (Vue 3, embedded in the binary) — dark UI, auto-refresh,
@@ -42,7 +46,8 @@ dashboard, a keyboard-driven TUI, and a CLI that scripts well.
 - Split configuration: main file + `conf_dir` / `conf.d` / `includes`
 - Webhook notifications on process and schedule events
 - Optional web UI (`server.web.enabled: false`) for headless deployments
-- Prometheus-style system overview endpoint
+- JSON system overview plus a Prometheus `/metrics` endpoint (system gauges,
+  per-process state, per-schedule enablement)
 
 ## Quick Start
 
@@ -158,6 +163,11 @@ schedules:
     command: "/opt/backup.sh"
     timeout: 300s
     enabled: true
+    # 与 processes 同语义的可选项：
+    # environment: { HTTPS_PROXY: "http://127.0.0.1:7890" }
+    # directory: /opt
+    # user: deploy
+    # args: ["--json"]        # 有 args 时直接 exec（不经 shell）
 ```
 
 A typical managed config, one file per service in `conf.d/`:
@@ -230,6 +240,7 @@ read the same credentials from the config file.
 | GET | `/server/logs?lines=200` | Starfleet's own logs |
 | GET | `/config` | Effective configuration (secrets masked) |
 | POST | `/config/reload` | Hot reload |
+| GET | `/metrics` | Prometheus 文本格式（系统 + 进程状态 + 调度开关） |
 | WS | `/ws/logs`, `/ws/events` | Real-time streams |
 
 ## Web UI ↔ TUI parity
