@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"reflect"
 	"sort"
@@ -255,7 +256,31 @@ func (j *Job) runExec(entry HistoryEntry) HistoryEntry {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "sh", "-c", j.Config.Command)
+	// args 存在时直接 exec（不经 shell）；否则走平台 shell（POSIX: sh -c，Windows: cmd /C）。
+	var cmd *exec.Cmd
+	if len(j.Config.Args) > 0 {
+		cmd = exec.CommandContext(ctx, j.Config.Command, j.Config.Args...)
+	} else {
+		cmd = shellCommand(ctx, j.Config.Command)
+	}
+	if j.Config.Directory != "" {
+		cmd.Dir = j.Config.Directory
+	}
+	// 环境：继承 starfleet 自身环境，再叠加配置项（与 processes 的 environment 同语义）。
+	if len(j.Config.Environment) > 0 {
+		env := os.Environ()
+		for k, v := range j.Config.Environment {
+			env = append(env, k+"="+v)
+		}
+		cmd.Env = env
+	}
+	// 自己一个进程组：超时时连子孙一起杀，不留孤儿。
+	setupExec(cmd)
+	if err := configureUser(cmd, j.Config.User); err != nil {
+		entry.Error = "configure user: " + err.Error()
+		entry.ExitCode = -1
+		return entry
+	}
 	output, err := cmd.CombinedOutput()
 	entry.Output = string(output)
 	if err != nil {
@@ -288,18 +313,23 @@ func (j *Job) Info() JobInfo {
 		Enabled: j.Config.Enabled,
 		Timeout: j.Config.Timeout.String(),
 		Labels:  j.Config.Labels,
+		// 注意：刻意不在 API 暴露 Environment——其中可能含密钥。
+		Directory: j.Config.Directory,
+		User:      j.Config.User,
 	}
 }
 
 // JobInfo holds scheduled job information.
 type JobInfo struct {
-	Name    string            `json:"name"`
-	Cron    string            `json:"cron"`
-	Type    string            `json:"type"`
-	Command string            `json:"command"`
-	URL     string            `json:"url,omitempty"`
-	Enabled bool              `json:"enabled"`
-	Timeout string            `json:"timeout"`
-	NextRun string            `json:"next_run,omitempty"` // next fire time, local tz
-	Labels  map[string]string `json:"labels"`
+	Name      string            `json:"name"`
+	Cron      string            `json:"cron"`
+	Type      string            `json:"type"`
+	Command   string            `json:"command"`
+	URL       string            `json:"url,omitempty"`
+	Enabled   bool              `json:"enabled"`
+	Timeout   string            `json:"timeout"`
+	NextRun   string            `json:"next_run,omitempty"` // next fire time, local tz
+	Labels    map[string]string `json:"labels"`
+	Directory string            `json:"directory,omitempty"`
+	User      string            `json:"user,omitempty"`
 }

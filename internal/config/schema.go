@@ -100,13 +100,18 @@ type HealthCheckConfig struct {
 // ScheduleConfig defines a scheduled task.
 type ScheduleConfig struct {
 	Cron    string            `yaml:"cron" json:"cron"`
-	Command string            `yaml:"command" json:"command,omitempty"`
-	Type    string            `yaml:"type" json:"type"` // "exec" or "http"
+	Command string            `yaml:"command" json:"command"`
+	Args    []string          `yaml:"args" json:"args,omitempty"` // 有 args 时直接 exec（不经 shell）
+	Type    string            `yaml:"type" json:"type"`           // "exec" or "http"
 	URL     string            `yaml:"url" json:"url,omitempty"`
 	Method  string            `yaml:"method" json:"method,omitempty"`
 	Timeout time.Duration     `yaml:"timeout" json:"timeout"`
 	Enabled bool              `yaml:"enabled" json:"enabled"`
 	Labels  map[string]string `yaml:"labels" json:"labels,omitempty"`
+	// 以下与 processes 的同名字段语义一致；以前会被 yaml 静默忽略，现真正生效。
+	Environment map[string]string `yaml:"environment" json:"environment,omitempty"` // 追加/覆盖到继承的环境之上
+	Directory   string            `yaml:"directory" json:"directory,omitempty"`     // 工作目录
+	User        string            `yaml:"user" json:"user,omitempty"`               // 以谁运行（仅 POSIX；Windows 忽略）
 }
 
 // LoggingConfig defines the logging configuration.

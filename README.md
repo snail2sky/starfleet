@@ -257,27 +257,22 @@ between them costs nothing.
 `Boot` = starts automatically with starfleet (`autostart`);
 `Autorestart` = restart policy when the process exits.
 
-## ipwatch (bundled)
+## ipwatch（已拆分为独立项目）
 
-Every release also ships `ipwatch`, a small LAN presence tracker: it
-sweeps a /24 every 15s (parallel pings + kernel neighbor table) and
-records **online/offline intervals + raw sightings in SQLite** for later
-analysis.
+`ipwatch`（内网设备在线追踪）已从本仓库拆出，独立发布在
+**[snail2sky/ipwatch](https://github.com/snail2sky/ipwatch)**——
+它与进程管理无关，不应捆绑在 starfleet 的发布包里。
 
-```bash
-ipwatch -subnet 192.168.1.0/24 -db ipwatch.db        # start recording
-ipwatch -db ipwatch.db -summary                      # devices + today's episodes
-sqlite3 ipwatch.db 'SELECT * FROM presence ORDER BY online_at DESC LIMIT 20'
+仍可把它交给 starfleet 托管：
+
+```yaml
+processes:
+  ipwatch:
+    command: "/usr/local/bin/ipwatch -subnet 192.168.1.0/24 -db /data0/apps/ipwatch/ipwatch.db"
+    directory: "/data0/apps/ipwatch"
+    user: orangepi
+    autostart: true
 ```
-
-It also ships a **read-only web dashboard** (default `:8095`, `-web` to
-change/disable): live online counts, a 24-hour presence timeline per
-device, the device table and a recent UP/DOWN feed — auto-refreshes
-every 5s. Keep it LAN-only (do not port-forward it to the WAN).
-
-Tables: `presence` (ip, online_at → offline_at, mac), `sightings`
-(ts, ip, mac, source, rtt_ms — 30d retention), `devices` (inventory).
-Run it under starfleet for supervision (see `conf.d/ipwatch.yml` style).
 
 ## Docker
 
