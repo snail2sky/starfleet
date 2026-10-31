@@ -119,8 +119,10 @@ Edit the two paths at the top of `/usr/local/bin/stf` to match your install.
 ## CLI
 
 ```
+starfleet                           # 裸跑 = 终端 UI（连着服务就接管它，没服务就独立运行）
 starfleet serve                     # run the API server + managed processes
-starfleet tui                       # terminal UI (connects to a running server)
+starfleet -d                        # 兼容旧用法：裸跑 -d 仍等价于 serve --daemon
+starfleet tui                       # 与裸跑相同（显式写法）
 starfleet validate                  # validate configuration and exit
 starfleet status                    # process states of the running server
 starfleet start|stop|restart NAME   # process lifecycle

@@ -52,12 +52,14 @@ var rootCmd = &cobra.Command{
 	Long: `Starfleet manages long-running processes and scheduled tasks with a
 web dashboard, terminal UI, real-time logs, health checks and hot-reload.
 
+Terminal UI (default):
+  starfleet                                         # bare command = TUI
+  starfleet tui                                     # explicit form, same thing
+
 Server:
   starfleet serve -c /etc/starfleet/starfleet.yml   # run the server
+  starfleet -d                                      # legacy: -d still = serve as daemon
   starfleet validate -c starfleet.yml               # check config and exit
-
-Terminal UI:
-  starfleet tui                                     # connects to server if up
 
 Control a running server:
   starfleet status                                  # process states
@@ -69,11 +71,26 @@ Control a running server:
                                                     #  default: auth.* from the config)
   starfleet run <schedule>                          # trigger a job now
   starfleet version`,
-	// Root without a subcommand = serve (keeps `starfleet -config x` working).
-	RunE:              runServe,
+	// 无子命令时默认进 TUI（连着服务就远程接管，没服务就独立运行）。
+	// 兼容：显式传 -d/--daemon 仍视为 `serve`（老脚本的后台守护用法）。
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if defaultAction(daemonMode) == "serve" {
+			return runServe(cmd, args)
+		}
+		return runTUI(cmd, args)
+	},
 	SilenceUsage:      true,
 	SilenceErrors:     false,
 	ValidArgsFunction: cobra.NoFileCompletions,
+}
+
+// defaultAction decides what a bare `starfleet` invocation does.
+// daemon=true keeps the pre-v1.5 behaviour (start the server as a daemon).
+func defaultAction(daemon bool) string {
+	if daemon {
+		return "serve"
+	}
+	return "tui"
 }
 
 var tuiCmd = &cobra.Command{
@@ -88,7 +105,7 @@ remote mode — it will not start its own processes. Otherwise it runs standalon
 
 var serveCmd = &cobra.Command{
 	Use:   "serve",
-	Short: "Run the API server (this is also the default)",
+	Short: "Run the API server (headless; the default bare command is the TUI)",
 	RunE:  runServe,
 }
 
