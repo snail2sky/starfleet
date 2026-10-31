@@ -63,6 +63,9 @@ type Model struct {
 	schedDetail     scheduler.JobInfo
 	schedDetailHist []scheduler.HistoryEntry
 
+	// cmdWidth 是 COMMAND 列的动态宽度（跟随终端宽度伸缩）。
+	cmdWidth int
+
 	// Common
 	spinner  spinner.Model
 	message  string
@@ -82,10 +85,11 @@ func SetVersion(v string) {
 	}
 }
 
-// procCols defines the process table columns.
+// baseProcCols / baseSchedCols 是列的基准定义；COMMAND 列在窗口尺寸变化时
+// 会吃掉多余宽度（fitColumns），让长命令真正可读。
 // BOOT = starts automatically when starfleet starts (autostart);
 // AUTORESTART = restart policy when the process exits.
-var procCols = []table.Column{
+var baseProcCols = []table.Column{
 	{Title: "NAME", Width: 18},
 	{Title: "STATE", Width: 10},
 	{Title: "BOOT", Width: 6},
@@ -96,6 +100,49 @@ var procCols = []table.Column{
 	{Title: "COMMAND", Width: 30},
 }
 
+var baseSchedCols = []table.Column{
+	{Title: "NAME", Width: 18},
+	{Title: "CRON", Width: 14},
+	{Title: "TYPE", Width: 6},
+	{Title: "ENABLED", Width: 8},
+	{Title: "NEXT RUN", Width: 20},
+	{Title: "TIMEOUT", Width: 10},
+	{Title: "COMMAND / URL", Width: 30},
+}
+
+// fitColumns lets the COMMAND column absorb the extra terminal width so long
+// commands are actually readable; every other column keeps its base width.
+// Returns the flex width that was applied.
+func fitColumns(t *table.Model, base []table.Column, flexIdx, availW int) int {
+	const cellPad = 2 // bubbles table pads each cell by 1 on each side
+	fixed := 0
+	for i, c := range base {
+		if i != flexIdx {
+			fixed += c.Width + cellPad
+		}
+	}
+	flex := availW - fixed - cellPad
+	if flex < 30 {
+		flex = 30
+	}
+	cols := make([]table.Column, len(base))
+	copy(cols, base)
+	cols[flexIdx].Width = flex
+	t.SetColumns(cols)
+	return flex
+}
+
+// resizeTables re-fits both tables to the terminal width.
+func (m *Model) resizeTables() {
+	tableW := m.width - 4 // 表格边框/内边距
+	if tableW < 80 {
+		tableW = 80
+	}
+	m.cmdWidth = fitColumns(&m.procTable, baseProcCols, len(baseProcCols)-1, tableW)
+	fitColumns(&m.schedTable, baseSchedCols, len(baseSchedCols)-1, tableW)
+}
+
+
 // NewModel creates a new TUI model.
 func NewModel(manager Manager) Model {
 	s := spinner.New()
@@ -104,24 +151,15 @@ func NewModel(manager Manager) Model {
 
 	// Process table with rich columns.
 	pt := table.New(
-		table.WithColumns(procCols),
+		table.WithColumns(baseProcCols),
 		table.WithFocused(true),
 		table.WithHeight(10),
 	)
 	pt.SetStyles(TableStyles()) // 全部表格共用一套样式（schedules 以前漏了，选中是库默认的红色）
 
-	// Schedule table.
-	schedCols := []table.Column{
-		{Title: "NAME", Width: 18},
-		{Title: "CRON", Width: 14},
-		{Title: "TYPE", Width: 6},
-		{Title: "ENABLED", Width: 8},
-		{Title: "NEXT RUN", Width: 20},
-		{Title: "TIMEOUT", Width: 10},
-		{Title: "COMMAND / URL", Width: 30},
-	}
+	// Schedule table（列定义见 baseSchedCols，COMMAND 列随窗口伸缩）。
 	st := table.New(
-		table.WithColumns(schedCols),
+		table.WithColumns(baseSchedCols),
 		table.WithFocused(true),
 		table.WithHeight(10),
 	)
@@ -161,6 +199,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.procTable.SetHeight(tableH)
 		m.schedTable.SetHeight(tableH)
+		m.resizeTables()
+		m.refreshData()
+		m.refreshSchedules()
 		return m, nil
 
 	case tickMsg:
@@ -1052,19 +1093,19 @@ func (m *Model) refreshData() {
 	processes := m.manager.List()
 	rows := make([]table.Row, len(processes))
 	for i, p := range processes {
-		boot := "off"
-		if p.Autostart {
-			boot = "on"
+		cmdW := m.cmdWidth
+		if cmdW <= 0 {
+			cmdW = 28
 		}
 		rows[i] = table.Row{
 			p.Name,
-			p.State,
-			boot,
+			StateBadge(p.State),
+			OnOff(p.Autostart),
 			fmt.Sprintf("%d", p.PID),
 			formatUptime(p.Uptime),
 			fmt.Sprintf("%d", p.RetryCount),
-			p.Autorestart,
-			truncate(p.Command, 28),
+			RestartPolicy(p.Autorestart),
+			truncate(p.Command, cmdW),
 		}
 	}
 	// Only touch the table when something actually changed — constant
@@ -1096,14 +1137,18 @@ func (m *Model) refreshSchedules() {
 		if next == "" {
 			next = "—"
 		}
+		cmdW := m.cmdWidth
+		if cmdW <= 0 {
+			cmdW = 28
+		}
 		rows = append(rows, table.Row{
 			j.Name,
 			j.Cron,
 			jobType,
-			fmt.Sprintf("%t", j.Enabled),
+			OnOff(j.Enabled),
 			next,
 			j.Timeout,
-			truncate(cmdOrURL, 28),
+			truncate(cmdOrURL, cmdW),
 		})
 	}
 	if rowsEqual(m.lastSchedRows, rows) {

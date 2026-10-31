@@ -267,3 +267,121 @@ func TestViewSchedDetailRendersHistoryEmpty(t *testing.T) {
 	}
 	_ = lipgloss.NewStyle() // 保证样式包被引用（避免误删 import）
 }
+
+// 开关类配置必须带颜色（on 绿 / off 红），比裸 true/false 直观。
+func TestToggleStylesHaveColor(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	on := OnOff(true)
+	off := OnOff(false)
+	if !strings.Contains(on, "on") || !strings.Contains(off, "off") {
+		t.Errorf("文本: %q / %q", on, off)
+	}
+	if on == off {
+		t.Errorf("开与关必须可区分")
+	}
+	// 真彩下应有 SGR 颜色码
+	if !strings.Contains(on, "\x1b[") {
+		t.Errorf("on 应带颜色码: %q", on)
+	}
+	always, unexpected, never := RestartPolicy("true"), RestartPolicy("unexpected"), RestartPolicy("false")
+	if !strings.Contains(always, "always") || !strings.Contains(unexpected, "unexpected") || !strings.Contains(never, "never") {
+		t.Errorf("策略文案: %q %q %q", always, unexpected, never)
+	}
+	if len(map[string]bool{always: true, unexpected: true, never: true}) != 3 {
+		t.Errorf("三种策略必须可区分")
+	}
+}
+
+// COMMAND 列要吃掉剩余屏幕宽度；其他列保持基准宽度。
+func TestFitColumnsFlexesCommand(t *testing.T) {
+	tbl := table.New(table.WithColumns(baseProcCols))
+	// 120 列宽的屏幕：固定列共 (18+10+6+7+12+8+12)+7*2 = 87，flex ≈ 120-87-2
+	flex := fitColumns(&tbl, baseProcCols, len(baseProcCols)-1, 120)
+	cols := tbl.Columns()
+	if cols[len(cols)-1].Width != flex {
+		t.Errorf("末列宽度=%d want %d", cols[len(cols)-1].Width, flex)
+	}
+	if flex <= 30 {
+		t.Errorf("120 宽下 COMMAND 应远大于30, got %d", flex)
+	}
+	for i := 0; i < len(cols)-1; i++ {
+		if cols[i].Width != baseProcCols[i].Width {
+			t.Errorf("固定列 %d 宽度被改动: %d", i, cols[i].Width)
+		}
+	}
+	// 极窄屏幕：夹到下限30
+	small := table.New(table.WithColumns(baseProcCols))
+	if got := fitColumns(&small, baseProcCols, len(baseProcCols)-1, 40); got != 30 {
+		t.Errorf("窄屏应夹到30, got %d", got)
+	}
+}
+
+// 行数据：开关着色 + command 按动态宽度截断（而不是写死28）。
+func TestRowsUseDynamicCmdWidthAndColoredToggles(t *testing.T) {
+	long := "/usr/bin/someverylongcommand --with-a-lot-of-arguments --flag=1 --flag=2 --flag=3"
+	fm := &fakeManager{
+		procs: []engine.ProcessInfo{{Name: "app", State: "RUNNING", Autostart: true,
+			Autorestart: "unexpected", Command: long}},
+		jobs: []scheduler.JobInfo{{Name: "job1", Cron: "* * * * *", Enabled: true, Command: long}},
+	}
+	m := NewModel(fm)
+	m.width, m.height = 200, 40
+	m.resizeTables()
+
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	m.refreshData()
+	row := m.procTable.SelectedRow()
+	if len(row) == 0 {
+		t.Fatal("无行")
+	}
+	if row[7] != long && len([]rune(row[7])) < 60 {
+		t.Errorf("宽屏下 command 应保留更多: %q", row[7])
+	}
+	if !strings.Contains(row[2], "on") || !strings.Contains(row[2], "\x1b[") {
+		t.Errorf("BOOT 应为着色的 on: %q", row[2])
+	}
+	if !strings.Contains(row[6], "unexpected") {
+		t.Errorf("AUTORESTART 应显示策略名: %q", row[6])
+	}
+
+	m.refreshSchedules()
+	srow := m.schedTable.SelectedRow()
+	if !strings.Contains(srow[3], "\x1b[") {
+		t.Errorf("ENABLED 应着色: %q", srow[3])
+	}
+
+	// 窄屏：截断生效
+	m.width = 100
+	m.resizeTables()
+	narrow := m.cmdWidth
+	m.refreshData()
+	if len([]rune(m.procTable.SelectedRow()[7])) > narrow {
+		t.Errorf("窄屏应按 cmdWidth=%d 截断: %q", narrow, m.procTable.SelectedRow()[7])
+	}
+}
+
+// 窗口尺寸变化应触发表格重排与行刷新。
+func TestWindowSizeTriggersRefit(t *testing.T) {
+	fm := &fakeManager{
+		procs: []engine.ProcessInfo{{Name: "app", State: "RUNNING"}},
+		jobs:  []scheduler.JobInfo{},
+	}
+	m := NewModel(fm)
+	m.width, m.height = 80, 24
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 180, Height: 50})
+	got := next.(Model)
+	if got.width != 180 || got.height != 50 {
+		t.Errorf("尺寸未记录: %dx%d", got.width, got.height)
+	}
+	if got.cmdWidth <= 30 {
+		t.Errorf("180 宽下 cmdWidth 应 >30, got %d", got.cmdWidth)
+	}
+	lastCol := got.procTable.Columns()[len(got.procTable.Columns())-1]
+	if lastCol.Width != got.cmdWidth {
+		t.Errorf("表格末列宽=%d 与 cmdWidth=%d 不一致", lastCol.Width, got.cmdWidth)
+	}
+}

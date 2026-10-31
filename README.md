@@ -268,6 +268,10 @@ between them costs nothing.
 | System overview | Overview page | — |
 | Config status | Settings page | — |
 
+TUI 表格细节：开关类配置（BOOT/ENABLED/AUTORESTART）用**颜色**呈现——
+`● on` 绿 / `○ off` 红，重启策略 `always` 绿 · `unexpected` 黄 · `never` 灰；
+COMMAND 列会**吃掉终端剩余宽度**（窗口变化时自动重排），长命令不再被截成 28 字符。
+
 TUI 通用键：`←` 在子页面（详情/日志/历史/今日）**返回上级**、在列表里切上一个 tab；
 `→` 同理；`Tab` / `1` `2` `3` 切标签页；`esc` 返回；`q` 退出。
 

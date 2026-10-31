@@ -70,6 +70,28 @@ func TableStyles() table.Styles {
 	return ts
 }
 
+// OnOff renders a boolean switch with color (green on / red off) — the TUI
+// equivalent of the web UI's colored switches; plain true/false is hard to scan.
+func OnOff(on bool) string {
+	if on {
+		return SuccessStyle.Render("● on")
+	}
+	return ErrorStyle.Render("○ off")
+}
+
+// RestartPolicy renders the autorestart policy with color:
+// always=green, unexpected=yellow, never=gray.
+func RestartPolicy(v string) string {
+	switch v {
+	case "true", "on":
+		return SuccessStyle.Render("● always")
+	case "unexpected":
+		return WarningStyle.Render("● unexpected")
+	default:
+		return MutedStyle.Render("○ never")
+	}
+}
+
 // StateColor returns the color for a process state.
 func StateColor(state string) lipgloss.Color {
 	switch state {
