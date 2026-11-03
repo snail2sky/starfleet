@@ -13,11 +13,11 @@ frontend:
 	cp -r web/dist internal/api/dist
 
 build:
-	CGO_ENABLED=0 go build $(LDFLAGS) -o bin/starfleet ./cmd/starfleet/
+	CGO_ENABLED=0 go build -buildmode=pie $(LDFLAGS) -o bin/starfleet ./cmd/starfleet/
 
 build-linux:
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -o bin/starfleet-linux-amd64 ./cmd/starfleet/
-	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -o bin/starfleet-linux-arm64 ./cmd/starfleet/
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -buildmode=pie $(LDFLAGS) -o bin/starfleet-linux-amd64 ./cmd/starfleet/
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -buildmode=pie $(LDFLAGS) -o bin/starfleet-linux-arm64 ./cmd/starfleet/
 
 test:
 	go test ./... -race -count=1
