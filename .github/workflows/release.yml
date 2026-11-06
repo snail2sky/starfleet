@@ -61,7 +61,10 @@ jobs:
           BIN="starfleet"
           if [ "$GOOS" = "windows" ]; then BIN="starfleet.exe"; fi
           mkdir -p "$DIR"
-          go build -trimpath \
+          # -buildmode=pie: static-pie 产物, 避免部分 Android/OEM 内核拒绝 ET_EXEC (e_type=2)
+          PIEFLAG=""
+          if [ "$GOOS" = "linux" ]; then PIEFLAG="-buildmode=pie"; fi
+          go build -trimpath $PIEFLAG \
             -ldflags "-s -w -X main.version=${GITHUB_REF_NAME} -X main.commit=${GITHUB_SHA::8} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             -o "$DIR/$BIN" ./cmd/starfleet/
           cp README.md LICENSE "$DIR/"

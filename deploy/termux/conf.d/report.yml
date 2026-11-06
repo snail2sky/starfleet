@@ -1,0 +1,9 @@
+schedules:
+    report:
+        cron: "*/5 * * * *"
+        command: /data/data/com.termux/files/home/bin/report.sh
+        timeout: 60s
+        enabled: true
+        labels:
+            migrated_from: crontab
+            purpose: feishu-status-report

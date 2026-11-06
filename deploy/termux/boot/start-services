@@ -1,0 +1,11 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# ~/.termux/boot/start-services — 由 Termux:Boot 开机执行
+# 拉起 sshd / tailscaled / starfleet 三件套
+export PREFIX=/data/data/com.termux/files/usr
+export HOME=/data/data/com.termux/files/home
+export PATH=$PREFIX/bin:/system/bin
+export LD_PRELOAD=$PREFIX/lib/libtermux-exec-ld-preload.so
+export TAILSCALE_SOCKET=$HOME/.local/run/tailscaled.sock
+pgrep -x sshd >/dev/null 2>&1 || sshd
+pgrep -x tailscaled >/dev/null 2>&1 || setsid nohup tailscaled --tun=userspace-networking --state=$HOME/.local/state/tailscaled.state --socket=$HOME/.local/run/tailscaled.sock >$HOME/tailscaled.log 2>&1 </dev/null &
+pgrep -f "starfleet serve" >/dev/null 2>&1 || setsid nohup $HOME/data0/apps/starfleet/starfleet serve -c $HOME/data0/apps/starfleet/starfleet.yml --log $HOME/data0/logs/starfleet.log >$HOME/data0/logs/starfleet-stdout.log 2>&1 </dev/null &
